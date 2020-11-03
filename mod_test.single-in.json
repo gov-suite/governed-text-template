@@ -1,0 +1,7 @@
+{
+    "templateURL": "./mod_test.single-tmpl.ts",
+    "content": {
+        "body": "This is my body content, which can contain a variable or anything else that can go into a TypeScript template literal.",
+        "heading": "<title>Page Title</title>"
+    }
+}

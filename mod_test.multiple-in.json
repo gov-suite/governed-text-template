@@ -1,0 +1,8 @@
+{
+    "templateURL": "./mod_test.multiple-tmpl.ts",
+    "templateIdentity": "content2",
+    "content": {
+        "body2": "Body Text",
+        "heading2": "Heading Text"
+    }
+}

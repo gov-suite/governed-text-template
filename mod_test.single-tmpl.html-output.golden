@@ -1,0 +1,11 @@
+<html>
+
+<head>
+    <title>Page Title</title>
+</head>
+
+<body>
+    This is my body content, which can contain a variable or anything else that can go into a TypeScript template literal.
+</body>
+
+</html>
