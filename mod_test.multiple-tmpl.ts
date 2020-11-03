@@ -8,7 +8,8 @@ export interface Content2 {
   readonly body2: string;
 }
 
-export type TemplateIdentity = "content1" | "content2";
+export const templateIdentities = ["content1", "content2"] as const;
+export type TemplateIdentity = typeof templateIdentities[number];
 
 export function isValidContent(
   o: unknown,
@@ -20,29 +21,54 @@ export function isValidContent(
 }
 
 export function onInvalidContent(
-  ctx: { content: Content1; templateIdentity: TemplateIdentity },
+  content: Content1 | Content2,
+  templateIdentity: TemplateIdentity,
 ): string {
-  return `body (with optional heading) expected in ${ctx.templateIdentity} content JSON: ${ctx.content}`;
+  return `body (with optional heading) expected in ${templateIdentity} content JSON: ${content}`;
 }
 
-export function executeTemplate1(ctx: { content: Content1 }): string {
-  return `Template 1: ${ctx.content.heading1}, ${ctx.content.body1}`;
+export function isValidTemplateID(o: string): o is TemplateIdentity {
+  if (templateIdentities.find((id) => id === o)) return true;
+  return false;
 }
 
-export function executeTemplate2(ctx: { content: Content2 }): string {
-  return `Template 2: ${ctx.content.heading2}, ${ctx.content.body2}`;
+export function onInvalidTemplateID(
+  templateIdentity: TemplateIdentity,
+  content: Content1 | Content2,
+): string {
+  return `template ID '${templateIdentity}' invalid, expected: ${
+    templateIdentities.join(", ")
+  }`;
+}
+
+export function executeTemplate1(content: Content1): string {
+  return `Template 1: ${content.heading1}, ${content.body1}`;
+}
+
+export function executeTemplate2(content: Content2): string {
+  return `Template 2: ${content.heading2}, ${content.body2}`;
 }
 
 export function executeTemplate(
-  ctx: { content: Content1 | Content2; templateIdentity: TemplateIdentity },
+  content: Content1 | Content2,
+  templateIdentity: TemplateIdentity,
 ): string {
-  switch (ctx.templateIdentity) {
+  if (!isValidTemplateID(templateIdentity)) {
+    return onInvalidTemplateID(templateIdentity, content);
+  }
+  switch (templateIdentity) {
     case "content1":
-      return executeTemplate1({ content: ctx.content as Content1 });
+      return executeTemplate1(content as Content1);
 
     case "content2":
-      return executeTemplate2({ content: ctx.content as Content2 });
+      return executeTemplate2(content as Content2);
   }
 }
 
-export default [executeTemplate, isValidContent, onInvalidContent];
+export default [
+  executeTemplate,
+  isValidContent,
+  onInvalidContent,
+  isValidTemplateID,
+  onInvalidTemplateID,
+];

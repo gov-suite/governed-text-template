@@ -29,22 +29,25 @@ export const isTemplateSelectorSupplier = safety.typeGuard<
 >("templateIdentity");
 
 export interface ContentProducer {
-  (
-    ctx:
-      | TemplateContentSupplier
-      | (TemplateContentSupplier & TemplateSelectorSupplier),
-  ): Promise<string>;
+  (content: Record<string, unknown>, templateID?: string): Promise<string>;
 }
 
 export interface ContentGuard {
-  (
-    o: unknown,
-    templateIdentity?: string,
-  ): o is Record<string, unknown>;
+  (content: unknown, templateID?: string): content is Record<string, unknown>;
 }
 
 export interface ContentReporter {
-  (ctx: TemplateContentSupplier): string;
+  (content: unknown, templateID?: string): string;
+}
+
+export type TemplateIdentity = string;
+
+export interface TemplateIdentityGuard {
+  (templateID: string): templateID is TemplateIdentity;
+}
+
+export interface TemplateIdentityReporter {
+  (templateID: string, content: unknown): string;
 }
 
 export interface ExecuteTemplateModuleOptions {
@@ -62,8 +65,11 @@ export interface ExecuteTemplateModuleOptions {
     err: Error,
     ctx: TemplateSrcContentSupplier,
   ) => string | undefined;
-  onGuardFailure?: (
+  onContentGuardFailure?: (
     ctx: TemplateSrcContentSupplier,
+  ) => string | undefined;
+  onTemplateIdGuardFailure?: (
+    ctx: TemplateSrcContentSupplier & TemplateSelectorSupplier,
   ) => string | undefined;
 }
 
@@ -74,13 +80,21 @@ export async function executeTemplateModule(
   options?: ExecuteTemplateModuleOptions,
 ): Promise<string> {
   let producer: ContentProducer;
-  let guard: ContentGuard | undefined;
-  let reporter: ContentReporter | undefined;
+  let contentGuard: ContentGuard | undefined;
+  let contentIssueReporter: ContentReporter | undefined;
+  let templateIdGuard: TemplateIdentityGuard | undefined;
+  let templateIdIssueReporter: TemplateIdentityReporter | undefined;
   try {
     const module = await import(ctx.srcURL);
     if (module.default) {
       if (Array.isArray(module.default)) {
-        [producer, guard, reporter] = module.default;
+        [
+          producer,
+          contentGuard,
+          contentIssueReporter,
+          templateIdGuard,
+          templateIdIssueReporter,
+        ] = module.default;
       } else if (typeof module.default === "function") {
         producer = module.default;
       } else {
@@ -104,20 +118,29 @@ export async function executeTemplateModule(
     }
     return `Unable to import template module ${ctx.srcURL}: ${err}`;
   }
-  if (
-    guard &&
-    !guard(
-      ctx.content,
-      isTemplateSelectorSupplier(ctx) ? ctx.templateIdentity : undefined,
-    )
-  ) {
-    if (options?.onGuardFailure) {
-      const result = options.onGuardFailure(ctx);
+  let templateID: string | undefined = undefined;
+  if (isTemplateSelectorSupplier(ctx)) {
+    templateID = ctx.templateIdentity;
+    if (templateIdGuard && !templateIdGuard(templateID)) {
+      if (options?.onTemplateIdGuardFailure) {
+        const result = options.onTemplateIdGuardFailure(ctx);
+        if (result) return result;
+      }
+      if (templateIdIssueReporter) {
+        return templateIdIssueReporter(templateID, ctx.content);
+      }
+    }
+  }
+  if (contentGuard && !contentGuard(ctx.content, templateID)) {
+    if (options?.onContentGuardFailure) {
+      const result = options.onContentGuardFailure(ctx);
       if (result) return result;
     }
-    if (reporter) return reporter(ctx);
+    if (contentIssueReporter) {
+      return contentIssueReporter(ctx.content, templateID);
+    }
   }
-  return await producer(ctx);
+  return await producer(ctx.content, templateID);
 }
 
 export interface JsonInput extends Partial<TemplateSelectorSupplier> {

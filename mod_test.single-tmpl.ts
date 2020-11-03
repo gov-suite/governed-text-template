@@ -7,19 +7,19 @@ export function isValidContent(o: unknown): o is Content {
   return o && typeof o === "object" && ("body" in o);
 }
 
-export function onInvalidContent(ctx: { content: Content }): string {
-  return `body (with optional heading) expected in content JSON: ${ctx.content}`;
+export function onInvalidContent(content: Content): string {
+  return `body (with optional heading) expected in content JSON: ${content}`;
 }
 
-export function executeTemplate(ctx: { content: Content }): string {
+export function executeTemplate(content: Content): string {
   return `<html>
 
 <head>
-    ${ctx.content.heading}
+    ${content.heading}
 </head>
 
 <body>
-    ${ctx.content.body}
+    ${content.body}
 </body>
 
 </html>`;
