@@ -44,9 +44,13 @@ export function executeTemplate(ctx: { content: Content }): string {
 export default [executeTemplate, isValidContent, onInvalidContent];
 ```
 
+Basically, the module is a normal TypeScript module except it has a module default set to an array like `export default [executeTemplate, isValidContent, onInvalidContent]`. 
+
+Each template module can supply a execution function, an optional type guard for the incoming content, and an optional function that will be called in case the incoming content is invalid. The content type, function names, etc. may use any names -- all type guards use normal TypeScript structured typing (not name based).
+
 # Multiple templates module source
 
-See [mod_test.multiple-tmpl.ts](mod_test.multiple-tmpl.ts) for a sample multiple templates module source file and [mod_test.ts](mod_test.ts) for examples of how to consume and execute a specific template within it.
+See [mod_test.multiple-tmpl.ts](mod_test.multiple-tmpl.ts) for a sample multiple templates module source file and [mod_test.ts](mod_test.ts) for examples of how to consume and execute a specific template within it. A muliple templates module is basically the same as a single template module but has one extra property available known as the *template identity* which is selects the template to execute.
 
 ```typescript
 export interface Content1 {
@@ -97,7 +101,6 @@ export function executeTemplate(
 }
 
 export default [executeTemplate, isValidContent, onInvalidContent];
-
 ```
 
 # HTTP Service Usage
