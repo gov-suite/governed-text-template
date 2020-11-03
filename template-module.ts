@@ -1,4 +1,5 @@
 import { safety } from "./deps.ts";
+import * as helpers from "./template-helpers.ts";
 
 export interface TemplateSrcUrlSupplier {
   readonly srcURL: string;
@@ -32,24 +33,6 @@ export interface ContentProducer {
   (content: Record<string, unknown>, templateID?: string): Promise<string>;
 }
 
-export interface ContentGuard {
-  (content: unknown, templateID?: string): content is Record<string, unknown>;
-}
-
-export interface ContentReporter {
-  (content: unknown, templateID?: string): string;
-}
-
-export type TemplateIdentity = string;
-
-export interface TemplateIdentityGuard {
-  (templateID: string): templateID is TemplateIdentity;
-}
-
-export interface TemplateIdentityReporter {
-  (templateID: string, content: unknown): string;
-}
-
 export interface ExecuteTemplateModuleOptions {
   onImportError?: (
     err: Error,
@@ -80,10 +63,12 @@ export async function executeTemplateModule(
   options?: ExecuteTemplateModuleOptions,
 ): Promise<string> {
   let producer: ContentProducer;
-  let contentGuard: ContentGuard | undefined;
-  let contentIssueReporter: ContentReporter | undefined;
-  let templateIdGuard: TemplateIdentityGuard | undefined;
-  let templateIdIssueReporter: TemplateIdentityReporter | undefined;
+  let contentGuard: helpers.TemplateIdContentGuard | undefined;
+  let contentIssueReporter:
+    | helpers.TemplateIdContentGuardIssueReporter
+    | undefined;
+  let templateIdGuard: helpers.TemplateIdGuard | undefined;
+  let templateIdIssueReporter: helpers.TemplateIdGuardIssueReporter | undefined;
   try {
     const module = await import(ctx.srcURL);
     if (module.default) {

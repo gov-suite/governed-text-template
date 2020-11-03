@@ -100,3 +100,15 @@ Deno.test(`HTML template module: mod_test.multiple-in.json`, async () => {
   );
   ta.assertStrictEquals(result, "Template 2: Heading Text, Body Text");
 });
+
+Deno.test(`HTML template module: mod_test-email-message-01.in.json`, async () => {
+  const result = await mod.transformJsonInput(
+    Deno.readTextFileSync(testFilePath("mod_test-email-message-01.in.json")),
+  );
+  ta.assertStrictEquals(
+    result,
+    Deno.readTextFileSync(
+      testFilePath("mod_test-email-message-01.html-output.golden"),
+    ),
+  );
+});

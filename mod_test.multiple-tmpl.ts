@@ -1,53 +1,40 @@
+import { safety } from "./deps.ts";
+import * as helpers from "./template-helpers.ts";
+
 export interface Content1 {
   readonly heading1?: string;
   readonly body1: string;
-}
-
-export interface Content2 {
-  readonly heading2?: string;
-  readonly body2: string;
-}
-
-export const templateIdentities = ["content1", "content2"] as const;
-export type TemplateIdentity = typeof templateIdentities[number];
-
-export function isValidContent(
-  o: unknown,
-  templateIdentity: TemplateIdentity,
-): o is Content1 | Content2 {
-  return templateIdentity === "content1"
-    ? (o && typeof o === "object" && ("body1" in o))
-    : (o && typeof o === "object" && ("body2" in o));
-}
-
-export function onInvalidContent(
-  content: Content1 | Content2,
-  templateIdentity: TemplateIdentity,
-): string {
-  return `body (with optional heading) expected in ${templateIdentity} content JSON: ${content}`;
-}
-
-export function isValidTemplateID(o: string): o is TemplateIdentity {
-  if (templateIdentities.find((id) => id === o)) return true;
-  return false;
-}
-
-export function onInvalidTemplateID(
-  templateIdentity: TemplateIdentity,
-  content: Content1 | Content2,
-): string {
-  return `template ID '${templateIdentity}' invalid, expected: ${
-    templateIdentities.join(", ")
-  }`;
 }
 
 export function executeTemplate1(content: Content1): string {
   return `Template 1: ${content.heading1}, ${content.body1}`;
 }
 
+export interface Content2 {
+  readonly heading2: string;
+  readonly body2: string;
+}
+
 export function executeTemplate2(content: Content2): string {
   return `Template 2: ${content.heading2}, ${content.body2}`;
 }
+
+export const templateIdentities = ["content1", "content2"] as const;
+export type TemplateIdentity = typeof templateIdentities[number];
+export const contentGuards: Record<TemplateIdentity, [
+  safety.TypeGuard<unknown>,
+  helpers.ContentGuardIssueReporter,
+]> = {
+  "content1": helpers.contentGuard<Content1>("body1"),
+  "content2": helpers.contentGuard<Content2>("heading2", "body2"),
+};
+export const [
+  isValidContent,
+  onInvalidContent,
+  isValidTemplateID,
+  onInvalidTemplateID,
+] = helpers
+  .templateIdentityGuard<TemplateIdentity>(templateIdentities, contentGuards);
 
 export function executeTemplate(
   content: Content1 | Content2,
