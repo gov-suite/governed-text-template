@@ -1,4 +1,4 @@
-import { docopt, fs, httpServer as http } from "./deps.ts";
+import { docopt, fs, oak, path } from "./deps.ts";
 import * as tm from "./template-module.ts";
 
 const docoptSpec = `
@@ -7,54 +7,107 @@ Template Orchestration Controller ${
 }.
 
 Usage:
-  toctl server [--port=<port>] [--baseURL=<url>] [--verbose]
+  toctl server [--port=<port>] [--module=<module-spec>]... [--verbose] [--allow-arbitrary-modules]
   toctl -h | --help
   toctl --version
 
 Options:
   -h --help         Show this screen
+  <module-spec>     A pre-defined module template (with an optional name like --module="./x.ts,x")
   --version         Show version
   --verbose         Be explicit about what's going on
 `;
 
+function httpServiceMiddleware(
+  chc: CommandHandlerContext,
+  app: oak.Application,
+): void {
+  if (chc.isVerbose) {
+    app.use(async (ctx, next) => {
+      await next();
+      const rt = ctx.response.headers.get("X-Response-Time");
+      console.log(`${ctx.request.method} ${ctx.request.url} - ${rt}`);
+    });
+  }
+
+  // add telemetry for each request
+  app.use(async (ctx, next) => {
+    const start = Date.now();
+    await next();
+    const ms = Date.now() - start;
+    ctx.response.headers.set("X-Response-Time", `${ms}ms`);
+  });
+}
+
+function httpServiceRouter(chc: CommandHandlerContext): oak.Router {
+  const { "--allow-arbitrary-modules": allowArbitraryModules } = chc.cliOptions;
+  const templateModules = chc.templateModules();
+  if (chc.isVerbose && templateModules) {
+    console.log("Pre-defined template modules:");
+    console.dir(templateModules);
+  }
+  const router = new oak.Router();
+  router
+    .get("/", (ctx) => {
+      ctx.response.body = "Template Orchestration Controller";
+    })
+    .get("/transform/:module/:templateId?", async (ctx) => {
+      if (templateModules) {
+        if (ctx.params && ctx.params.module) {
+          const templateURL = templateModules[ctx.params.module];
+          if (templateURL) {
+            const content: Record<string, unknown> = {};
+            ctx.request.url.searchParams.forEach((v, k) => content[k] = v);
+            ctx.response.body = await tm.executeTemplateModule({
+              srcURL: templateURL,
+              content: content,
+              templateIdentity: ctx.params.templateId,
+            });
+          } else {
+            `Template modules '${ctx.params.module} not found. Available: ${
+              Object.keys(templateModules).join(",")
+            }'`;
+          }
+        }
+      } else {
+        ctx.response.body = "No modules supplied using --module arguments.";
+      }
+    })
+    .post("/transform", async (ctx) => {
+      if (allowArbitraryModules) {
+        const result = ctx.request.body({ type: "text" });
+        ctx.response.body = await tm.transformJsonInput(await result.value);
+      } else {
+        ctx.response.body =
+          "Server was not started with --allow-arbitrary-modules, can only use pre-defined modules";
+      }
+    });
+  return router;
+}
+
 export async function httpServiceHandler(
-  ctx: CommandHandlerContext,
+  chc: CommandHandlerContext,
 ): Promise<true | void> {
   const {
     "server": server,
     "--port": portSpec,
     "--baseURL": baseUrlSpec,
-  } = ctx.cliOptions;
+  } = chc.cliOptions;
   if (server) {
     const port = typeof portSpec === "number" ? portSpec : 8163;
     const baseURL = typeof baseUrlSpec === "string"
       ? baseUrlSpec
       : `http://localhost:${port}`;
-    const verbose = ctx.isVerbose;
-    const s = http.serve({ port: port });
+    const verbose = chc.isVerbose;
     if (verbose) {
       console.log(`Template Orchestration service running at ${baseURL}`);
     }
-    for await (const req of s) {
-      const url = new URL(req.url, baseURL);
-      try {
-        if (verbose) console.log(req.method, url.pathname);
-        // try with:
-        // * curl -H "Content-Type: application/json" --data @mod_test.single-in.json http://localhost:8163/transform
-        if (req.method == "POST" && url.pathname.startsWith("/transform")) {
-          await req.respond(
-            { body: await tm.transformJsonInput(await Deno.readAll(req.body)) },
-          );
-          continue;
-        }
-      } catch (err) {
-        await req.respond({ body: err });
-        continue;
-      }
-      await req.respond(
-        { body: "Not a valid route: " + url },
-      );
-    }
+    const app = new oak.Application();
+    httpServiceMiddleware(chc, app);
+    const router = httpServiceRouter(chc);
+    app.use(router.routes());
+    app.use(router.allowedMethods());
+    await app.listen({ port: port });
     return true;
   }
 }
@@ -64,6 +117,7 @@ export interface CommandHandlerContext {
   readonly calledFromMain: boolean;
   readonly cliOptions: docopt.DocOptions;
   readonly isVerbose: boolean;
+  readonly templateModules: () => Record<string, string> | undefined;
 }
 
 export interface CommandHandler<T extends CommandHandlerContext> {
@@ -80,6 +134,23 @@ export class TypicalCommandHandlerContext implements CommandHandlerContext {
   ) {
     const { "--verbose": verbose } = this.cliOptions;
     this.isVerbose = verbose ? true : false;
+  }
+
+  templateModules(): Record<string, string> | undefined {
+    const {
+      "--module": templateModuleSpecs,
+      "--module-spec-delim": moduleSpecDelim,
+    } = this.cliOptions;
+    if (Array.isArray(templateModuleSpecs)) {
+      const result: Record<string, string> = {};
+      const delim = typeof moduleSpecDelim === "string" ? moduleSpecDelim : ",";
+      for (const module of templateModuleSpecs) {
+        const [url, name] = module.split(delim);
+        result[name && name.length > 0 ? name : path.basename(url, "")] = url;
+      }
+      return result;
+    }
+    return undefined;
   }
 }
 
@@ -130,12 +201,6 @@ export async function CLI<
       if (handled) break;
     }
     if (!handled) {
-      for (const handler of commonHandlers) {
-        handled = await handler(context);
-        if (handled) break;
-      }
-    }
-    if (!handled) {
       console.error("Unable to handle validly parsed docoptSpec:");
       console.dir(options);
     }
@@ -147,7 +212,7 @@ export async function CLI<
 if (import.meta.main) {
   CLI(
     docoptSpec,
-    [httpServiceHandler],
+    [httpServiceHandler, ...commonHandlers],
     (options: docopt.DocOptions): CommandHandlerContext => {
       return new TypicalCommandHandlerContext(
         import.meta.url,

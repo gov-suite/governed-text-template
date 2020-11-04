@@ -19,23 +19,19 @@ export interface Content {
   readonly body: string;
 }
 
-export function isValidContent(o: unknown): o is Content {
-  return o && typeof o === "object" && ("body" in o);
-}
+export const [isValidContent, onInvalidContent] = helpers.contentGuard<Content>(
+  "body",
+);
 
-export function onInvalidContent(ctx: { content: Content }): string {
-  return `body (with optional heading) expected in content JSON: ${ctx.content}`;
-}
-
-export function executeTemplate(ctx: { content: Content }): string {
+export function executeTemplate(content: Content): string {
   return `<html>
 
 <head>
-    ${ctx.content.heading}
+    ${content.heading}
 </head>
 
 <body>
-    ${ctx.content.body}
+    ${content.body}
 </body>
 
 </html>`;
@@ -53,62 +49,104 @@ Each template module can supply a execution function, an optional type guard for
 See [mod_test.multiple-tmpl.ts](mod_test.multiple-tmpl.ts) for a sample multiple templates module source file and [mod_test.ts](mod_test.ts) for examples of how to consume and execute a specific template within it. A muliple templates module is basically the same as a single template module but has one extra property available known as the *template identity* which is selects the template to execute.
 
 ```typescript
+import { safety } from "./deps.ts";
+import * as helpers from "./template-helpers.ts";
+
 export interface Content1 {
   readonly heading1?: string;
   readonly body1: string;
 }
 
+export function executeTemplate1(content: Content1): string {
+  return `Template 1: ${content.heading1}, ${content.body1}`;
+}
+
 export interface Content2 {
-  readonly heading2?: string;
+  readonly heading2: string;
   readonly body2: string;
 }
 
-export type TemplateIdentity = "content1" | "content2";
-
-export function isValidContent(
-  o: unknown,
-  templateIdentity: TemplateIdentity,
-): o is Content1 | Content2 {
-  return templateIdentity === "content1"
-    ? (o && typeof o === "object" && ("body1" in o))
-    : (o && typeof o === "object" && ("body2" in o));
+export function executeTemplate2(content: Content2): string {
+  return `Template 2: ${content.heading2}, ${content.body2}`;
 }
 
-export function onInvalidContent(
-  ctx: { content: Content1; templateIdentity: TemplateIdentity },
-): string {
-  return `body (with optional heading) expected in ${ctx.templateIdentity} content JSON: ${ctx.content}`;
-}
-
-export function executeTemplate1(ctx: { content: Content1 }): string {
-  return `Template 1: ${ctx.content.heading1}, ${ctx.content.body1}`;
-}
-
-export function executeTemplate2(ctx: { content: Content2 }): string {
-  return `Template 2: ${ctx.content.heading2}, ${ctx.content.body2}`;
-}
+export const templateIdentities = ["content1", "content2"] as const;
+export type TemplateIdentity = typeof templateIdentities[number];
+export const contentGuards: Record<TemplateIdentity, [
+  safety.TypeGuard<unknown>,
+  helpers.ContentGuardIssueReporter,
+]> = {
+  "content1": helpers.contentGuard<Content1>("body1"),
+  "content2": helpers.contentGuard<Content2>("heading2", "body2"),
+};
+export const [
+  isValidContent,
+  onInvalidContent,
+  isValidTemplateID,
+  onInvalidTemplateID,
+] = helpers
+  .templateIdentityGuard<TemplateIdentity>(templateIdentities, contentGuards);
 
 export function executeTemplate(
-  ctx: { content: Content1 | Content2; templateIdentity: TemplateIdentity },
+  content: Content1 | Content2,
+  templateIdentity: TemplateIdentity,
 ): string {
-  switch (ctx.templateIdentity) {
+  if (!isValidTemplateID(templateIdentity)) {
+    return onInvalidTemplateID(templateIdentity, content);
+  }
+  switch (templateIdentity) {
     case "content1":
-      return executeTemplate1({ content: ctx.content as Content1 });
+      return executeTemplate1(content as Content1);
 
     case "content2":
-      return executeTemplate2({ content: ctx.content as Content2 });
+      return executeTemplate2(content as Content2);
   }
 }
 
-export default [executeTemplate, isValidContent, onInvalidContent];
+export default [
+  executeTemplate,
+  isValidContent,
+  onInvalidContent,
+  isValidTemplateID,
+  onInvalidTemplateID,
+];
 ```
 
-# HTTP Service Usage
+# HTTP Service Usage with pre-defined templates (safest technique)
 
-Start the Template Orchestration server:
+You can run the server using as many pre-defined template modules with optional names. The format is `--module=url,name` - if no `,name` is provided then the url's basename is used as the name. When run using pre-defined modules you can use HTTP GET to transform the template.
 
 ```bash
-deno-run toctl.ts server --verbose
+deno-run toctl.ts server --verbose --module=./mod_test-html-email-messages.tmpl.ts,medigy-email --module=./mod_test.single-tmpl.ts --module=./mod_test.multiple-tmpl.ts
+```
+
+After you run the above, you'll see:
+
+```bash
+Template Orchestration service running at http://localhost:8163
+Pre-defined template modules:
+{
+  "medigy-email": "./mod_test-html-email-messages.tmpl.ts",
+  "mod_test.single-tmpl.ts": "./mod_test.single-tmpl.ts",
+  "mod_test.multiple-tmpl.ts": "./mod_test.multiple-tmpl.ts"
+}
+```
+
+Now, you can then use the following in a browser or cURL:
+
+```
+http://localhost:8163/transform/medigy-email/create-password?authnUrl=this
+http://localhost:8163/transform/medigy-email/reset-password?authnUrl=this
+http://localhost:8163/transform/mod_test.single-tmpl.ts?body=TestBody&heading=TestHeading
+http://localhost:8163/transform/mod_test.multiple-tmpl.ts/content1?heading1=TestHeading&body1=TestBody
+```
+
+# HTTP Service Usage with arbitrary templates (might be unsafe)
+
+Start the Template Orchestration server with `--allow-arbitrary-modules` and you can pass in any arbitrary module as a URL:
+
+```bash
+deno-run toctl.ts server --verbose --allow-arbitrary-modules
 ```
 
 In a separate window, try the service using [mod_test.single-in.json](mod_test.single-in.json) as the HTTP request body:
@@ -116,6 +154,18 @@ In a separate window, try the service using [mod_test.single-in.json](mod_test.s
 ```bash
 cd $HOME/workspaces/github.com/shah/ts-safe-template
 curl -H "Content-Type: application/json" --data @mod_test.single-in.json http://localhost:8163/transform
+```
+
+If the JSON provided in the POST is the following:
+
+```json
+{
+    "templateURL": "./mod_test.single-tmpl.ts",
+    "content": {
+        "body": "This is my body content, which can contain a variable or anything else that can go into a TypeScript template literal.",
+        "heading": "<title>Page Title</title>"
+    }
+}
 ```
 
 The output should be:

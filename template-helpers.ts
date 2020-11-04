@@ -122,6 +122,8 @@ export function invalidTemplateIdContentReporter<
   T extends TemplateIdentity = TemplateIdentity,
 >(): TemplateIdContentGuardIssueReporter<T> {
   return (content: unknown, templateIdentity?: T): string => {
-    return `unexpected content for template ${templateIdentity}: ${content}`;
+    return `unexpected content for template ${templateIdentity}: ${
+      JSON.stringify(content)
+    }`;
   };
 }
