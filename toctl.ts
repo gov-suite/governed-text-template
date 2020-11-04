@@ -8,6 +8,7 @@ Template Orchestration Controller ${
 
 Usage:
   toctl server [--port=<port>] [--module=<module-spec>]... [--verbose] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>]
+  toctl transform json
   toctl validate config --module=<module-spec>... [--verbose] [--module-spec-delim=<delimiter>]
   toctl -h | --help
   toctl --version
@@ -111,6 +112,21 @@ export async function httpServiceHandler(
     app.use(router.routes());
     app.use(router.allowedMethods());
     await app.listen({ port: port });
+    return true;
+  }
+}
+
+export async function transformStdInJsonHandler(
+  chc: CommandHandlerContext,
+): Promise<true | void> {
+  const { "transform": transform, "json": json } = chc.cliOptions;
+  if (transform && json) {
+    const input = Deno.readAllSync(Deno.stdin);
+    if (!input || input.length > 0) {
+      console.log(await tm.transformJsonInput(input));
+    } else {
+      console.error("No JSON provided in STDIN");
+    }
     return true;
   }
 }
@@ -261,7 +277,12 @@ export async function CLI<
 if (import.meta.main) {
   CLI(
     docoptSpec,
-    [httpServiceHandler, validateConfigHandler, ...commonHandlers],
+    [
+      httpServiceHandler,
+      transformStdInJsonHandler,
+      validateConfigHandler,
+      ...commonHandlers,
+    ],
     (options: docopt.DocOptions): CommandHandlerContext => {
       return new TypicalCommandHandlerContext(
         import.meta.url,
