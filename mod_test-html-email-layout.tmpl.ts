@@ -1,7 +1,6 @@
-import * as helpers from "./template-helpers.ts";
-import * as xt from "./xml-tag.ts";
+import * as mod from "./mod.ts";
 
-export const p = xt.xmlTag("p");
+export const p = mod.xmlTag("p");
 
 export interface EmailMessageContent {
   readonly heading: string;
@@ -9,8 +8,8 @@ export interface EmailMessageContent {
   readonly signature?: string;
 }
 
-export const [isValidEmailMessageContent, onInvalidEmailMessageContent] =
-  helpers.contentGuard<EmailMessageContent>("heading", "body");
+export const [isValidEmailMessageContent, onInvalidEmailMessageContent] = mod
+  .contentGuard<EmailMessageContent>("heading", "body");
 
 export function anchorTip(href: string): string {
   return p

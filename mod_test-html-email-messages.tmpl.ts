@@ -1,18 +1,18 @@
 import { safety } from "./deps.ts";
+import * as mod from "./mod.ts";
 import {
   anchorTip,
   callToActionButton,
   executeTemplate as layout,
   p,
 } from "./mod_test-html-email-layout.tmpl.ts";
-import * as helpers from "./template-helpers.ts";
 
 export interface AuthnMessageContent {
   readonly authnUrl: string;
 }
 
-export const [isValidAuthnMessageContent, onInvalidAuthnMessageContent] =
-  helpers.contentGuard<AuthnMessageContent>(
+export const [isValidAuthnMessageContent, onInvalidAuthnMessageContent] = mod
+  .contentGuard<AuthnMessageContent>(
     "authnUrl",
   );
 
@@ -48,7 +48,7 @@ export const templateIdentities = [
 export type TemplateIdentity = typeof templateIdentities[number];
 export const contentGuards: Record<TemplateIdentity, [
   safety.TypeGuard<unknown>,
-  helpers.ContentGuardIssueReporter,
+  mod.ContentGuardIssueReporter,
 ]> = {
   "create-password": [isValidAuthnMessageContent, onInvalidAuthnMessageContent],
   "reset-password": [isValidAuthnMessageContent, onInvalidAuthnMessageContent],
@@ -58,7 +58,7 @@ export const [
   onInvalidContent,
   isValidTemplateID,
   onInvalidTemplateID,
-] = helpers
+] = mod
   .templateIdentityGuard<TemplateIdentity>(templateIdentities, contentGuards);
 
 export function executeTemplate(

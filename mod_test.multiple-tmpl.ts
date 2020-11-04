@@ -1,5 +1,5 @@
 import { safety } from "./deps.ts";
-import * as helpers from "./template-helpers.ts";
+import * as mod from "./mod.ts";
 
 export interface Content1 {
   readonly heading1?: string;
@@ -23,17 +23,17 @@ export const templateIdentities = ["content1", "content2"] as const;
 export type TemplateIdentity = typeof templateIdentities[number];
 export const contentGuards: Record<TemplateIdentity, [
   safety.TypeGuard<unknown>,
-  helpers.ContentGuardIssueReporter,
+  mod.ContentGuardIssueReporter,
 ]> = {
-  "content1": helpers.contentGuard<Content1>("body1"),
-  "content2": helpers.contentGuard<Content2>("heading2", "body2"),
+  "content1": mod.contentGuard<Content1>("body1"),
+  "content2": mod.contentGuard<Content2>("heading2", "body2"),
 };
 export const [
   isValidContent,
   onInvalidContent,
   isValidTemplateID,
   onInvalidTemplateID,
-] = helpers
+] = mod
   .templateIdentityGuard<TemplateIdentity>(templateIdentities, contentGuards);
 
 export function executeTemplate(

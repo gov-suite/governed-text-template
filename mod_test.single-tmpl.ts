@@ -1,11 +1,11 @@
-import * as helpers from "./template-helpers.ts";
+import * as mod from "./mod.ts";
 
 export interface Content {
   readonly heading?: string;
   readonly body: string;
 }
 
-export const [isValidContent, onInvalidContent] = helpers.contentGuard<Content>(
+export const [isValidContent, onInvalidContent] = mod.contentGuard<Content>(
   "body",
 );
 
