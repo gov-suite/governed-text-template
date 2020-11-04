@@ -7,14 +7,15 @@ Template Orchestration Controller ${
 }.
 
 Usage:
-  toctl server [--port=<port>] [--module=<module-spec>]... [--verbose] [--allow-arbitrary-modules]
-  toctl validate config --module=<module-spec>... [--verbose]
+  toctl server [--port=<port>] [--module=<module-spec>]... [--verbose] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>]
+  toctl validate config --module=<module-spec>... [--verbose] [--module-spec-delim=<delimiter>]
   toctl -h | --help
   toctl --version
 
 Options:
   -h --help         Show this screen
   <module-spec>     A pre-defined module template (with an optional name like --module="./x.ts,x")
+  <delimiter>       The character(s) used to separate pre-defined template module name and URL (default ",")
   --version         Show version
   --verbose         Be explicit about what's going on
 `;
