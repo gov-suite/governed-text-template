@@ -1,4 +1,4 @@
-import { docopt, fs, oak, path } from "./deps.ts";
+import { colors, docopt, fs, oak, path } from "./deps.ts";
 import * as tm from "./template-module.ts";
 
 const docoptSpec = `
@@ -8,6 +8,7 @@ Template Orchestration Controller ${
 
 Usage:
   toctl server [--port=<port>] [--module=<module-spec>]... [--verbose] [--allow-arbitrary-modules]
+  toctl validate config --module=<module-spec>... [--verbose]
   toctl -h | --help
   toctl --version
 
@@ -45,6 +46,9 @@ function httpServiceRouter(chc: CommandHandlerContext): oak.Router {
   if (chc.isVerbose && templateModules) {
     console.log("Pre-defined template modules:");
     console.dir(templateModules);
+  }
+  if (templateModules) {
+    chc.validateTemplateModules(templateModules);
   }
   const router = new oak.Router();
   router
@@ -92,13 +96,10 @@ export async function httpServiceHandler(
   const {
     "server": server,
     "--port": portSpec,
-    "--baseURL": baseUrlSpec,
   } = chc.cliOptions;
   if (server) {
     const port = typeof portSpec === "number" ? portSpec : 8163;
-    const baseURL = typeof baseUrlSpec === "string"
-      ? baseUrlSpec
-      : `http://localhost:${port}`;
+    const baseURL = `http://localhost:${port}`;
     const verbose = chc.isVerbose;
     if (verbose) {
       console.log(`Template Orchestration service running at ${baseURL}`);
@@ -113,12 +114,34 @@ export async function httpServiceHandler(
   }
 }
 
+export async function validateConfigHandler(
+  chc: CommandHandlerContext,
+): Promise<true | void> {
+  const { "validate": validate, "config": config } = chc.cliOptions;
+  if (validate && config) {
+    const templateModules = chc.templateModules();
+    if (!templateModules) {
+      console.error("No --module entries defined.");
+      return true;
+    }
+    if (chc.isVerbose && templateModules) {
+      console.log("Pre-defined template modules:");
+      console.dir(templateModules);
+    }
+    chc.validateTemplateModules(templateModules);
+    return true;
+  }
+}
+
 export interface CommandHandlerContext {
   readonly calledFromMetaURL: string;
   readonly calledFromMain: boolean;
   readonly cliOptions: docopt.DocOptions;
   readonly isVerbose: boolean;
   readonly templateModules: () => Record<string, string> | undefined;
+  readonly validateTemplateModules: (
+    templateModules: Record<string, string>,
+  ) => Promise<void>;
 }
 
 export interface CommandHandler<T extends CommandHandlerContext> {
@@ -152,6 +175,30 @@ export class TypicalCommandHandlerContext implements CommandHandlerContext {
       return result;
     }
     return undefined;
+  }
+
+  async validateTemplateModules(
+    templateModules: Record<string, string>,
+  ): Promise<void> {
+    for (const entry of Object.entries(templateModules)) {
+      const [name, url] = entry;
+      const [_, diagnostic] = await tm.importTemplateModuleHandlers({
+        srcURL: url,
+      });
+      if (diagnostic) {
+        console.error(
+          `[${colors.yellow(name)}: ${colors.brightWhite(url)}] ${
+            colors.red(diagnostic)
+          }`,
+        );
+      } else if (this.isVerbose) {
+        console.log(
+          `${colors.yellow(name)}: ${colors.brightWhite(url)} ${
+            colors.green("OK")
+          }`,
+        );
+      }
+    }
   }
 }
 
@@ -213,7 +260,7 @@ export async function CLI<
 if (import.meta.main) {
   CLI(
     docoptSpec,
-    [httpServiceHandler, ...commonHandlers],
+    [httpServiceHandler, validateConfigHandler, ...commonHandlers],
     (options: docopt.DocOptions): CommandHandlerContext => {
       return new TypicalCommandHandlerContext(
         import.meta.url,

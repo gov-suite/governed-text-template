@@ -33,17 +33,21 @@ export interface ContentProducer {
   (content: Record<string, unknown>, templateID?: string): Promise<string>;
 }
 
-export interface ExecuteTemplateModuleOptions {
+export interface ImportTemplateModuleOptions {
   onImportError?: (
     err: Error,
-    ctx: TemplateSrcContentSupplier,
+    ctx: TemplateSrcUrlSupplier,
   ) => string | undefined;
   onInvalidDefaultType?: (
-    ctx: TemplateSrcContentSupplier,
+    ctx: TemplateSrcUrlSupplier,
   ) => string | undefined;
   onNoModuleDefault?: (
-    ctx: TemplateSrcContentSupplier,
+    ctx: TemplateSrcUrlSupplier,
   ) => string | undefined;
+}
+
+export interface ExecuteTemplateModuleOptions
+  extends ImportTemplateModuleOptions {
   onExecuteError?: (
     err: Error,
     ctx: TemplateSrcContentSupplier,
@@ -56,76 +60,122 @@ export interface ExecuteTemplateModuleOptions {
   ) => string | undefined;
 }
 
-export async function executeTemplateModule(
-  ctx:
-    | TemplateSrcContentSupplier
-    | TemplateSrcContentSupplier & TemplateSelectorSupplier,
-  options?: ExecuteTemplateModuleOptions,
-): Promise<string> {
+export interface TemplateModuleHandlers {
+  producer: ContentProducer;
+  contentGuard?: helpers.TemplateIdContentGuard;
+  contentIssueReporter?: helpers.TemplateIdContentGuardIssueReporter;
+  templateIdGuard?: helpers.TemplateIdGuard;
+  templateIdIssueReporter?: helpers.TemplateIdGuardIssueReporter;
+}
+
+export async function importTemplateModuleHandlers(
+  ctx: TemplateSrcUrlSupplier,
+  options?: ImportTemplateModuleOptions,
+): Promise<[handlers: TemplateModuleHandlers, diagnostic: string | undefined]> {
   let producer: ContentProducer;
-  let contentGuard: helpers.TemplateIdContentGuard | undefined;
-  let contentIssueReporter:
-    | helpers.TemplateIdContentGuardIssueReporter
-    | undefined;
-  let templateIdGuard: helpers.TemplateIdGuard | undefined;
-  let templateIdIssueReporter: helpers.TemplateIdGuardIssueReporter | undefined;
+  const handlers: Omit<TemplateModuleHandlers, "producer"> = {};
+  const error = (diag: string): [TemplateModuleHandlers, string] => {
+    return [{ producer, ...handlers }, diag];
+  };
   try {
     const module = await import(ctx.srcURL);
     if (module.default) {
       if (Array.isArray(module.default)) {
         [
           producer,
-          contentGuard,
-          contentIssueReporter,
-          templateIdGuard,
-          templateIdIssueReporter,
+          handlers.contentGuard,
+          handlers.contentIssueReporter,
+          handlers.templateIdGuard,
+          handlers.templateIdIssueReporter,
         ] = module.default;
       } else if (typeof module.default === "function") {
         producer = module.default;
       } else {
         if (options?.onInvalidDefaultType) {
-          const result = options.onInvalidDefaultType(ctx);
-          if (result) return result;
+          const diagnostic = options.onInvalidDefaultType(ctx);
+          if (diagnostic) return error(diagnostic);
         }
-        return `module.default is not an array or function: ${ctx.srcURL}`;
+        return error(
+          `module.default is not an array or function: ${ctx.srcURL}`,
+        );
       }
     } else {
       if (options?.onNoModuleDefault) {
-        const result = options.onNoModuleDefault(ctx);
-        if (result) return result;
+        const diagnostic = options.onNoModuleDefault(ctx);
+        if (diagnostic) return error(diagnostic);
       }
-      return `No module.default found in ${ctx.srcURL}`;
+      return error(`No module.default found in ${ctx.srcURL}`);
     }
   } catch (err) {
     if (options?.onImportError) {
-      const result = options.onImportError(err, ctx);
-      if (result) return result;
+      const diagnostic = options.onImportError(err, ctx);
+      if (diagnostic) return error(diagnostic);
     }
-    return `Unable to import template module ${ctx.srcURL}: ${err}`;
+    return error(`Unable to import template module ${ctx.srcURL}: ${err}`);
   }
+  return [{ producer, ...handlers }, undefined];
+}
+
+export async function validateTemplateModuleContent(
+  ctx:
+    | TemplateSrcContentSupplier
+    | TemplateSrcContentSupplier & TemplateSelectorSupplier,
+  options?: ExecuteTemplateModuleOptions,
+): Promise<[handlers: TemplateModuleHandlers, diagnostic: string | undefined]> {
+  const [handlers, diagnostic] = await importTemplateModuleHandlers(
+    ctx,
+    options,
+  );
+  if (diagnostic) {
+    return [handlers, diagnostic];
+  }
+  const error = (diag: string): [TemplateModuleHandlers, string] => {
+    return [handlers, diag];
+  };
   let templateID: string | undefined = undefined;
   if (isTemplateSelectorSupplier(ctx)) {
     templateID = ctx.templateIdentity;
-    if (templateIdGuard && !templateIdGuard(templateID)) {
+    if (handlers.templateIdGuard && !handlers.templateIdGuard(templateID)) {
       if (options?.onTemplateIdGuardFailure) {
-        const result = options.onTemplateIdGuardFailure(ctx);
-        if (result) return result;
+        const diagnostic = options.onTemplateIdGuardFailure(ctx);
+        if (diagnostic) return error(diagnostic);
       }
-      if (templateIdIssueReporter) {
-        return templateIdIssueReporter(templateID, ctx.content);
+      if (handlers.templateIdIssueReporter) {
+        return error(handlers.templateIdIssueReporter(templateID, ctx.content));
       }
     }
   }
-  if (contentGuard && !contentGuard(ctx.content, templateID)) {
+  if (
+    handlers.contentGuard && !handlers.contentGuard(ctx.content, templateID)
+  ) {
     if (options?.onContentGuardFailure) {
-      const result = options.onContentGuardFailure(ctx);
-      if (result) return result;
+      const diagnostic = options.onContentGuardFailure(ctx);
+      if (diagnostic) return error(diagnostic);
     }
-    if (contentIssueReporter) {
-      return contentIssueReporter(ctx.content, templateID);
+    if (handlers.contentIssueReporter) {
+      return error(handlers.contentIssueReporter(ctx.content, templateID));
     }
   }
-  return await producer(ctx.content, templateID);
+  return [handlers, undefined];
+}
+
+export async function executeTemplateModule(
+  ctx:
+    | TemplateSrcContentSupplier
+    | TemplateSrcContentSupplier & TemplateSelectorSupplier,
+  options?: ExecuteTemplateModuleOptions,
+): Promise<string> {
+  const [handlers, diagnostic] = await validateTemplateModuleContent(
+    ctx,
+    options,
+  );
+  if (diagnostic) {
+    return diagnostic;
+  }
+  if (isTemplateSelectorSupplier(ctx)) {
+    return await handlers.producer(ctx.content, ctx.templateIdentity);
+  }
+  return await handlers.producer(ctx.content, undefined);
 }
 
 export interface JsonInput extends Partial<TemplateSelectorSupplier> {
