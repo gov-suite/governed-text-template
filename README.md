@@ -112,7 +112,55 @@ export default [
 ];
 ```
 
-# HTTP Service Usage with pre-defined templates (safest technique)
+# Transformation CLI with built-in HTTP server
+
+The `mod.ts` file allows template processing as a Deno based library but the `toctl.ts` command gives template processing as both a CLI with capability to process content via STDIN at the command line and as an HTTP service.
+
+To see what's available, try this:
+
+```
+❯ deno-run toctl.ts --help
+Template Orchestration Controller v0.0.0-local.main.
+
+Usage:
+  toctl server [--port=<port>] [--module=<module-spec>]... [--verbose] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>]
+  toctl transform json
+  toctl validate config --module=<module-spec>... [--verbose] [--module-spec-delim=<delimiter>]
+  toctl -h | --help
+  toctl --version
+
+Options:
+  -h --help         Show this screen
+  <module-spec>     A pre-defined module template (with an optional name like --module="./x.ts,x")
+  <delimiter>       The character(s) used to separate pre-defined template module name and URL (default ",")
+  --version         Show version
+  --verbose         Be explicit about what's going on
+```
+
+## CLI Usage via STDIN
+
+You can execute a template by passing in JSON via STDIN and getting the result as STDOUT:
+
+```bash
+❯ cat mod_test.multiple-in.json | deno-run toctl.ts transform json
+```
+
+The JSON input expected looks like this:
+
+```json
+{
+    "templateURL": "./mod_test.multiple-tmpl.ts",
+    "templateIdentity": "content2",
+    "content": {
+        "body2": "Body Text",
+        "heading2": "Heading Text"
+    }
+}
+```
+
+The `templateURL` is the TypeScript module that should be used as the template. If it's a multiple-template module you pass in `templateIdentity` but if it's a single-template module you can leave that property out. The `content` property contains all the values that will be passed into the template for processing and will be checked for type-safety if the template module author added type guards.
+
+## HTTP Service Usage with pre-defined templates (safest technique)
 
 You can run the server using as many pre-defined template modules with optional names. The format is `--module=url,name` - if no `,name` is provided then the url's basename is used as the name. When run using pre-defined modules you can use HTTP GET to transform the template.
 
@@ -141,7 +189,7 @@ http://localhost:8163/transform/mod_test.single-tmpl.ts?body=TestBody&heading=Te
 http://localhost:8163/transform/mod_test.multiple-tmpl.ts/content1?heading1=TestHeading&body1=TestBody
 ```
 
-# HTTP Service Usage with arbitrary templates (might be unsafe)
+## HTTP Service Usage with arbitrary templates (might be unsafe)
 
 Start the Template Orchestration server with `--allow-arbitrary-modules` and you can pass in any arbitrary module as a URL:
 
