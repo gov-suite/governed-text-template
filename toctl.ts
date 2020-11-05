@@ -101,12 +101,14 @@ export async function httpServiceHandler(
   } = chc.cliOptions;
   if (server) {
     const port = typeof portSpec === "number" ? portSpec : 8163;
-    const baseURL = `http://localhost:${port}`;
-    const verbose = chc.isVerbose;
-    if (verbose) {
-      console.log(`Template Orchestration service running at ${baseURL}`);
-    }
     const app = new oak.Application();
+    if (chc.isVerbose) {
+      app.addEventListener("listen", () => {
+        console.log(
+          `Template Orchestration service running at http://localhost:${port}`,
+        );
+      });
+    }
     httpServiceMiddleware(chc, app);
     const router = httpServiceRouter(chc);
     app.use(router.routes());
