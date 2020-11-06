@@ -178,28 +178,50 @@ export async function executeTemplateModule(
   return await handlers.producer(ctx.content, undefined);
 }
 
+export interface NamedTemplateUrlSupplier {
+  (name: string): string | undefined;
+}
+
 export interface JsonInput extends Partial<TemplateSelectorSupplier> {
-  readonly templateURL: string;
+  readonly templateURL?: string;
+  readonly templateName?: string;
   readonly content: Record<string, unknown>;
 }
 
 export const isJsonInput = safety.typeGuard<JsonInput>(
-  "templateURL",
   "content",
 );
 
 export function isValidJsonInput(o: unknown): o is JsonInput {
   if (isJsonInput(o)) {
-    if (typeof o.templateURL !== "string") return false;
+    if (o.templateURL && typeof o.templateURL !== "string") return false;
+    if (o.templateName && typeof o.templateName !== "string") return false;
+    if (!o.templateURL && !o.templateName) return false;
     if (typeof o.content !== "object") return false;
     return true;
   }
   return false;
 }
 
+export function templateURL(
+  allowArbitraryModules: boolean,
+  ji: JsonInput,
+  namedTemplateUrl?: NamedTemplateUrlSupplier,
+): string | undefined {
+  if (ji.templateURL) return ji.templateURL;
+  if (ji.templateName && namedTemplateUrl) {
+    return namedTemplateUrl(ji.templateName);
+  }
+  return undefined;
+}
+
 export async function transformJsonInput(
   inputSource: string | Uint8Array,
   options?: ExecuteTemplateModuleOptions & {
+    allowArbitraryModule?: (url: string) => boolean;
+    namedTemplateUrl?: NamedTemplateUrlSupplier;
+    onArbitraryModuleNotAllowed?: (url: string) => string | undefined;
+    onInvalidTemplateName?: (name: string) => string | undefined;
     onInvalidJSON?: (inputSource: string | Uint8Array) => string | undefined;
   },
 ): Promise<string> {
@@ -209,9 +231,40 @@ export async function transformJsonInput(
       : new TextDecoder().decode(inputSource),
   );
   if (isValidJsonInput(jsonInstance)) {
+    let tmplURL: string | undefined;
+    if (jsonInstance.templateURL) {
+      if (
+        options?.allowArbitraryModule &&
+        options?.allowArbitraryModule(jsonInstance.templateURL)
+      ) {
+        tmplURL = jsonInstance.templateURL;
+      } else {
+        if (options?.onArbitraryModuleNotAllowed) {
+          const result = options?.onArbitraryModuleNotAllowed(
+            jsonInstance.templateURL,
+          );
+          if (result) return result;
+        }
+        return `templateURL can only be provided if allowArbitraryModule() is provided`;
+      }
+    } else if (jsonInstance.templateName && options?.namedTemplateUrl) {
+      tmplURL = options?.namedTemplateUrl(jsonInstance.templateName);
+    }
+    if (!tmplURL) {
+      if (jsonInstance.templateName) {
+        if (options?.onInvalidTemplateName) {
+          const result = options.onInvalidTemplateName(
+            jsonInstance.templateName,
+          );
+          if (result) return result;
+        }
+        return `templateName '${jsonInstance.templateName}' is not valid`;
+      }
+      return `Either templateURL or templateName must be supplied`;
+    }
     return await executeTemplateModule(
       {
-        srcURL: jsonInstance.templateURL,
+        srcURL: tmplURL,
         content: jsonInstance.content,
         templateIdentity: jsonInstance.templateIdentity || undefined,
       },
@@ -222,5 +275,5 @@ export async function transformJsonInput(
     const result = options.onInvalidJSON(inputSource);
     if (result) return result;
   }
-  return "Invalid JSON input";
+  return "Invalid JSON input: " + JSON.stringify(jsonInstance);
 }

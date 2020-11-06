@@ -1,0 +1,7 @@
+{
+    "templateName": "lookupUrlForName",
+    "templateIdentity": "create-password",
+    "content": {
+        "authnUrl": "https://www.medigy.com/x/reset-password"
+    }
+}

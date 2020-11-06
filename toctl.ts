@@ -81,13 +81,18 @@ function httpServiceRouter(chc: CommandHandlerContext): oak.Router {
       }
     })
     .post("/transform", async (ctx) => {
-      if (allowArbitraryModules) {
-        const result = ctx.request.body({ type: "text" });
-        ctx.response.body = await tm.transformJsonInput(await result.value);
-      } else {
-        ctx.response.body =
-          "Server was not started with --allow-arbitrary-modules, can only use pre-defined modules";
-      }
+      const result = ctx.request.body({ type: "text" });
+      ctx.response.body = await tm.transformJsonInput(await result.value, {
+        allowArbitraryModule: (templateUrl) => {
+          return allowArbitraryModules ? true : false;
+        },
+        onArbitraryModuleNotAllowed: (templateUrl: string): string => {
+          return `Server was not started with --allow-arbitrary-modules, can only use pre-defined modules (not ${templateUrl})`;
+        },
+        namedTemplateUrl: (name: string): string | undefined => {
+          return templateModules ? templateModules[name] : undefined;
+        },
+      });
     });
   return router;
 }
@@ -125,7 +130,14 @@ export async function transformStdInJsonHandler(
   if (transform && json) {
     const input = Deno.readAllSync(Deno.stdin);
     if (!input || input.length > 0) {
-      console.log(await tm.transformJsonInput(input));
+      const preDefinedModules = chc.templateModules();
+      console.log(
+        await tm.transformJsonInput(input, {
+          namedTemplateUrl: (name: string): string | undefined => {
+            return preDefinedModules ? preDefinedModules[name] : undefined;
+          },
+        }),
+      );
     } else {
       console.error("No JSON provided in STDIN");
     }

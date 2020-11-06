@@ -85,6 +85,11 @@ Deno.test(`HTML template module: mod_test.single-tmpl.ts produces mod_test.tmpl.
 Deno.test(`HTML template module: mod_test.single-in.json produces mod_test.single-tmpl.html-output.golden`, async () => {
   const result = await mod.transformJsonInput(
     Deno.readTextFileSync(testFilePath("mod_test.single-in.json")),
+    {
+      allowArbitraryModule: (templateUrl) => {
+        return true;
+      },
+    },
   );
   ta.assertStrictEquals(
     result,
@@ -97,6 +102,11 @@ Deno.test(`HTML template module: mod_test.single-in.json produces mod_test.singl
 Deno.test(`HTML template module: mod_test.multiple-in.json`, async () => {
   const result = await mod.transformJsonInput(
     Deno.readTextFileSync(testFilePath("mod_test.multiple-in.json")),
+    {
+      allowArbitraryModule: (templateUrl) => {
+        return true;
+      },
+    },
   );
   ta.assertStrictEquals(result, "Template 2: Heading Text, Body Text");
 });
@@ -104,6 +114,33 @@ Deno.test(`HTML template module: mod_test.multiple-in.json`, async () => {
 Deno.test(`HTML template module: mod_test-email-message-01.in.json`, async () => {
   const result = await mod.transformJsonInput(
     Deno.readTextFileSync(testFilePath("mod_test-email-message-01.in.json")),
+    {
+      allowArbitraryModule: (templateUrl) => {
+        return true;
+      },
+    },
+  );
+  ta.assertStrictEquals(
+    result,
+    Deno.readTextFileSync(
+      testFilePath("mod_test-email-message-01.html-output.golden"),
+    ),
+  );
+});
+
+Deno.test(`HTML template module: mod_test-email-message-01.in-name.json`, async () => {
+  const result = await mod.transformJsonInput(
+    Deno.readTextFileSync(
+      testFilePath("mod_test-email-message-01.in-name.json"),
+    ),
+    {
+      namedTemplateUrl: (name: string): string | undefined => {
+        if (name == "lookupUrlForName") {
+          return "./mod_test-html-email-messages.tmpl.ts";
+        }
+        return undefined;
+      },
+    },
   );
   ta.assertStrictEquals(
     result,
