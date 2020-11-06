@@ -303,7 +303,7 @@ if (import.meta.main) {
       ...commonHandlers,
     ],
     (options: docopt.DocOptions): CommandHandlerContext => {
-      return new TypicalCommandHandlerContext(
+      return new CommandHandlerContext(
         import.meta.url,
         import.meta.main,
         options,
