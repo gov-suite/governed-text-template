@@ -46,6 +46,9 @@ function httpServiceMiddleware(
 function httpServiceRouter(chc: CommandHandlerContext): oak.Router {
   const { "--allow-arbitrary-modules": allowArbitraryModules } = chc.cliOptions;
   const templateModules = chc.templateModules();
+  if (chc.isVerbose && chc.defaultTemplateModule()) {
+    console.log("Default template module:", chc.defaultTemplateModule());
+  }
   if (chc.isVerbose && templateModules) {
     console.log("Pre-defined template modules:");
     console.dir(templateModules);
