@@ -58,6 +58,7 @@ function httpServiceRouter(chc: CommandHandlerContext): oak.Router {
       ctx.response.body = "Template Orchestration Controller";
     })
     // TODO: add https://github.com/marcopacini/ts-prometheus based /metrics route
+    // TODO: add https://tools.ietf.org/id/draft-inadarei-api-health-check-01.html based /health route
     .get("/transform/:module/:templateId?", async (ctx) => {
       if (templateModules) {
         if (ctx.params && ctx.params.module) {
