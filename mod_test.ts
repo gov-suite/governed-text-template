@@ -134,7 +134,7 @@ Deno.test(`HTML template module: mod_test-email-message-01.in-name.json`, async 
       testFilePath("mod_test-email-message-01.in-name.json"),
     ),
     {
-      namedTemplateUrl: (name: string): string | undefined => {
+      namedTemplateURL: (name: string): string | undefined => {
         if (name == "lookupUrlForName") {
           return "./mod_test-html-email-messages.tmpl.ts";
         }
@@ -147,5 +147,22 @@ Deno.test(`HTML template module: mod_test-email-message-01.in-name.json`, async 
     Deno.readTextFileSync(
       testFilePath("mod_test-email-message-01.html-output.golden"),
     ),
+  );
+});
+
+Deno.test(`HTML template module: mod_test-email-message-01.in-default.json`, async () => {
+  const result = await mod.transformJsonInput(
+    Deno.readTextFileSync(
+      testFilePath("mod_test-email-message-01.in-default.json"),
+    ),
+    {
+      defaultTemplateURL: (): string => {
+        return "./template-module-debug.ts";
+      },
+    },
+  );
+  ta.assertStrictEquals(
+    result,
+    `{"authnUrl":"https://www.medigy.com/x/reset-password"}`,
   );
 });

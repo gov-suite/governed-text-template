@@ -7,8 +7,8 @@ Template Orchestration Controller ${
 }.
 
 Usage:
-  toctl server [--port=<port>] [--module=<module-spec>]... [--verbose] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>]
-  toctl transform json
+  toctl server [--port=<port>] [--module=<module-spec>]... [--default-module=<module-url>] [--verbose] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>]
+  toctl transform json [--default-module=<module-url>]
   toctl validate config --module=<module-spec>... [--verbose] [--module-spec-delim=<delimiter>]
   toctl -h | --help
   toctl --version
@@ -16,6 +16,7 @@ Usage:
 Options:
   -h --help         Show this screen
   <module-spec>     A pre-defined module template (with an optional name like --module="./x.ts,x")
+  <module-url>      A module template URL
   <delimiter>       The character(s) used to separate pre-defined template module name and URL (default ",")
   --version         Show version
   --verbose         Be explicit about what's going on
@@ -87,10 +88,13 @@ function httpServiceRouter(chc: CommandHandlerContext): oak.Router {
         allowArbitraryModule: (templateUrl) => {
           return allowArbitraryModules ? true : false;
         },
+        defaultTemplateURL: (): string => {
+          return chc.defaultTemplateModule() || `./template-module-debug.ts`;
+        },
         onArbitraryModuleNotAllowed: (templateUrl: string): string => {
           return `Server was not started with --allow-arbitrary-modules, can only use pre-defined modules (not ${templateUrl})`;
         },
-        namedTemplateUrl: (name: string): string | undefined => {
+        namedTemplateURL: (name: string): string | undefined => {
           return templateModules ? templateModules[name] : undefined;
         },
       });
@@ -134,7 +138,13 @@ export async function transformStdInJsonHandler(
       const preDefinedModules = chc.templateModules();
       console.log(
         await tm.transformJsonInput(input, {
-          namedTemplateUrl: (name: string): string | undefined => {
+          allowArbitraryModule: (templateUrl) => {
+            return true;
+          },
+          defaultTemplateURL: (): string => {
+            return chc.defaultTemplateModule() || `./template-module-debug.ts`;
+          },
+          namedTemplateURL: (name: string): string | undefined => {
             return preDefinedModules ? preDefinedModules[name] : undefined;
           },
         }),
@@ -165,22 +175,11 @@ export async function validateConfigHandler(
   }
 }
 
-export interface CommandHandlerContext {
-  readonly calledFromMetaURL: string;
-  readonly calledFromMain: boolean;
-  readonly cliOptions: docopt.DocOptions;
-  readonly isVerbose: boolean;
-  readonly templateModules: () => Record<string, string> | undefined;
-  readonly validateTemplateModules: (
-    templateModules: Record<string, string>,
-  ) => Promise<void>;
-}
-
 export interface CommandHandler<T extends CommandHandlerContext> {
   (ctx: T): Promise<true | void>;
 }
 
-export class TypicalCommandHandlerContext implements CommandHandlerContext {
+export class CommandHandlerContext implements CommandHandlerContext {
   readonly isVerbose: boolean;
 
   constructor(
@@ -207,6 +206,11 @@ export class TypicalCommandHandlerContext implements CommandHandlerContext {
       return result;
     }
     return undefined;
+  }
+
+  defaultTemplateModule(): string | undefined {
+    const { "--default-module": defaultModuleURL } = this.cliOptions;
+    return typeof defaultModuleURL === "string" ? defaultModuleURL : undefined;
   }
 
   async validateTemplateModules(
