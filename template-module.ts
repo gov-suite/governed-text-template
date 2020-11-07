@@ -179,7 +179,7 @@ export async function executeTemplateModule(
 }
 
 export interface JsonInput extends Partial<TemplateSelectorSupplier> {
-  readonly templateURL?: string;
+  readonly templateModuleURL?: string;
   readonly templateName?: string;
   readonly content: Record<string, unknown>;
 }
@@ -190,7 +190,11 @@ export const isJsonInput = safety.typeGuard<JsonInput>(
 
 export function isValidJsonInput(o: unknown): o is JsonInput {
   if (isJsonInput(o)) {
-    if (o.templateURL && typeof o.templateURL !== "string") return false;
+    if (
+      o.templateModuleURL && typeof o.templateModuleURL !== "string"
+    ) {
+      return false;
+    }
     if (o.templateName && typeof o.templateName !== "string") return false;
     if (typeof o.content !== "object") return false;
     return true;
@@ -204,8 +208,9 @@ export interface NamedTemplateUrlSupplier {
 
 export interface TransformJsonInputOptions {
   allowArbitraryModule?: (url: string) => boolean;
-  namedTemplateURL?: NamedTemplateUrlSupplier;
-  defaultTemplateURL?: (ji: JsonInput) => string;
+  namedTemplateModuleURL?: NamedTemplateUrlSupplier;
+  defaultTemplateModuleURL?: (ji: JsonInput) => string;
+  defaultTemplateIdentity?: (ji: JsonInput) => string | undefined;
   onArbitraryModuleNotAllowed?: (url: string) => string | undefined;
   onInvalidTemplateName?: (name: string) => string | undefined;
   onInvalidJSON?: (inputSource: string | Uint8Array) => string | undefined;
@@ -221,28 +226,30 @@ export async function transformJsonInput(
       : new TextDecoder().decode(inputSource),
   );
   if (isValidJsonInput(jsonInstance)) {
-    let tmplURL: string | undefined = options?.defaultTemplateURL
-      ? options?.defaultTemplateURL(jsonInstance)
+    let tmplModuleURL: string | undefined = options?.defaultTemplateModuleURL
+      ? options?.defaultTemplateModuleURL(jsonInstance)
       : undefined;
-    if (jsonInstance.templateURL) {
+    if (jsonInstance.templateModuleURL) {
       if (
         options?.allowArbitraryModule &&
-        options?.allowArbitraryModule(jsonInstance.templateURL)
+        options?.allowArbitraryModule(jsonInstance.templateModuleURL)
       ) {
-        tmplURL = jsonInstance.templateURL;
+        tmplModuleURL = jsonInstance.templateModuleURL;
       } else {
         if (options?.onArbitraryModuleNotAllowed) {
           const result = options?.onArbitraryModuleNotAllowed(
-            jsonInstance.templateURL,
+            jsonInstance.templateModuleURL,
           );
           if (result) return result;
         }
-        return `templateURL can only be provided if allowArbitraryModule() is provided`;
+        return `templateModuleURL can only be provided if allowArbitraryModule() is provided`;
       }
-    } else if (jsonInstance.templateName && options?.namedTemplateURL) {
-      tmplURL = options?.namedTemplateURL(jsonInstance.templateName);
+    } else if (jsonInstance.templateName && options?.namedTemplateModuleURL) {
+      tmplModuleURL = options?.namedTemplateModuleURL(
+        jsonInstance.templateName,
+      );
     }
-    if (!tmplURL) {
+    if (!tmplModuleURL) {
       if (jsonInstance.templateName) {
         if (options?.onInvalidTemplateName) {
           const result = options.onInvalidTemplateName(
@@ -252,13 +259,18 @@ export async function transformJsonInput(
         }
         return `templateName '${jsonInstance.templateName}' is not valid`;
       }
-      return `Either templateURL, templateName, or defaultTemplateURL() must be supplied`;
+      return `Either templateModuleURL, templateName, or defaultTemplateModuleURL() must be supplied`;
     }
+    const defaultTmplSelectorID: string | undefined =
+      options?.defaultTemplateIdentity
+        ? options?.defaultTemplateIdentity(jsonInstance)
+        : undefined;
     return await executeTemplateModule(
       {
-        srcURL: tmplURL,
+        srcURL: tmplModuleURL,
         content: jsonInstance.content,
-        templateIdentity: jsonInstance.templateIdentity || undefined,
+        templateIdentity: jsonInstance.templateIdentity ||
+          defaultTmplSelectorID,
       },
       options,
     );

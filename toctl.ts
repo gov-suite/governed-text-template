@@ -7,8 +7,8 @@ Template Orchestration Controller ${
 }.
 
 Usage:
-  toctl server [--port=<port>] [--module=<module-spec>]... [--default-module=<module-url>] [--verbose] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>]
-  toctl transform json [--default-module=<module-url>]
+  toctl server [--port=<port>] [--module=<module-spec>]... [--default-module=<module-url>] [--default-tmpl-id=<template-identity>] [--verbose] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>]
+  toctl transform json [--default-module=<module-url>] [--default-tmpl-id=<template-identity>]
   toctl validate config --module=<module-spec>... [--verbose] [--module-spec-delim=<delimiter>]
   toctl -h | --help
   toctl --version
@@ -63,6 +63,7 @@ function httpServiceRouter(chc: CommandHandlerContext): oak.Router {
     })
     // TODO: add https://github.com/marcopacini/ts-prometheus based /metrics route
     // TODO: add https://tools.ietf.org/id/draft-inadarei-api-health-check-01.html based /health route
+    // TODO: add https://github.com/singhcool/deno-swagger-doc based OpenAPI generator
     .get("/transform/:module/:templateId?", async (ctx) => {
       if (templateModules) {
         if (ctx.params && ctx.params.module) {
@@ -91,13 +92,16 @@ function httpServiceRouter(chc: CommandHandlerContext): oak.Router {
         allowArbitraryModule: (templateUrl) => {
           return allowArbitraryModules ? true : false;
         },
-        defaultTemplateURL: (): string => {
+        defaultTemplateModuleURL: (): string => {
           return chc.defaultTemplateModule() || `./template-module-debug.ts`;
+        },
+        defaultTemplateIdentity: (): string | undefined => {
+          return chc.defaultTemplateIdentity();
         },
         onArbitraryModuleNotAllowed: (templateUrl: string): string => {
           return `Server was not started with --allow-arbitrary-modules, can only use pre-defined modules (not ${templateUrl})`;
         },
-        namedTemplateURL: (name: string): string | undefined => {
+        namedTemplateModuleURL: (name: string): string | undefined => {
           return templateModules ? templateModules[name] : undefined;
         },
       });
@@ -115,13 +119,11 @@ export async function httpServiceHandler(
   if (server) {
     const port = typeof portSpec === "number" ? portSpec : 8163;
     const app = new oak.Application();
-    if (chc.isVerbose) {
-      app.addEventListener("listen", () => {
-        console.log(
-          `Template Orchestration service running at http://localhost:${port}`,
-        );
-      });
-    }
+    app.addEventListener("listen", () => {
+      console.log(
+        `Template Orchestration service running at http://localhost:${port}`,
+      );
+    });
     httpServiceMiddleware(chc, app);
     const router = httpServiceRouter(chc);
     app.use(router.routes());
@@ -144,10 +146,13 @@ export async function transformStdInJsonHandler(
           allowArbitraryModule: (templateUrl) => {
             return true;
           },
-          defaultTemplateURL: (): string => {
+          defaultTemplateModuleURL: (): string => {
             return chc.defaultTemplateModule() || `./template-module-debug.ts`;
           },
-          namedTemplateURL: (name: string): string | undefined => {
+          defaultTemplateIdentity: (): string | undefined => {
+            return chc.defaultTemplateIdentity();
+          },
+          namedTemplateModuleURL: (name: string): string | undefined => {
             return preDefinedModules ? preDefinedModules[name] : undefined;
           },
         }),
@@ -214,6 +219,13 @@ export class CommandHandlerContext implements CommandHandlerContext {
   defaultTemplateModule(): string | undefined {
     const { "--default-module": defaultModuleURL } = this.cliOptions;
     return typeof defaultModuleURL === "string" ? defaultModuleURL : undefined;
+  }
+
+  defaultTemplateIdentity(): string | undefined {
+    const { "--default-tmpl-id": defaultTemplateId } = this.cliOptions;
+    return typeof defaultTemplateId === "string"
+      ? defaultTemplateId
+      : undefined;
   }
 
   async validateTemplateModules(

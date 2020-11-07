@@ -149,7 +149,7 @@ The JSON input expected looks like this:
 
 ```json
 {
-    "templateURL": "./mod_test.multiple-tmpl.ts",
+    "templateModuleURL": "./mod_test.multiple-tmpl.ts",
     "templateIdentity": "content2",
     "content": {
         "body2": "Body Text",
@@ -158,7 +158,7 @@ The JSON input expected looks like this:
 }
 ```
 
-The `templateURL` is the TypeScript module that should be used as the template. If it's a multiple-template module you pass in `templateIdentity` but if it's a single-template module you can leave that property out. The `content` property contains all the values that will be passed into the template for processing and will be checked for type-safety if the template module author added type guards.
+The `templateModuleURL` is the TypeScript module that should be used as the template. If it's a multiple-template module you pass in `templateIdentity` but if it's a single-template module you can leave that property out. The `content` property contains all the values that will be passed into the template for processing and will be checked for type-safety if the template module author added type guards.
 
 ## HTTP Service Usage with pre-defined templates (safest technique)
 
@@ -208,7 +208,7 @@ If the JSON provided in the POST is the following:
 
 ```json
 {
-    "templateURL": "./mod_test.single-tmpl.ts",
+    "templateModuleURL": "./mod_test.single-tmpl.ts",
     "content": {
         "body": "This is my body content, which can contain a variable or anything else that can go into a TypeScript template literal.",
         "heading": "<title>Page Title</title>"

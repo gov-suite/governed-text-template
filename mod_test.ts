@@ -134,7 +134,7 @@ Deno.test(`HTML template module: mod_test-email-message-01.in-name.json`, async 
       testFilePath("mod_test-email-message-01.in-name.json"),
     ),
     {
-      namedTemplateURL: (name: string): string | undefined => {
+      namedTemplateModuleURL: (name: string): string | undefined => {
         if (name == "lookupUrlForName") {
           return "./mod_test-html-email-messages.tmpl.ts";
         }
@@ -156,7 +156,7 @@ Deno.test(`HTML template module: mod_test-email-message-01.in-default.json`, asy
       testFilePath("mod_test-email-message-01.in-default.json"),
     ),
     {
-      defaultTemplateURL: (): string => {
+      defaultTemplateModuleURL: (): string => {
         return "./template-module-debug.ts";
       },
     },
