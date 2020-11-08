@@ -10,7 +10,7 @@ Template Orchestration Controller ${
 Usage:
   toctl server [--port=<port>] [--module=<module-spec>]... [--default-module=<module-url>] [--default-tmpl-id=<template-identity>] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>] [--verbose]
   toctl transform json [--default-module=<module-url>] [--default-tmpl-id=<template-identity>] [--allow-arbitrary-modules] 
-  toctl validate config --module=<module-spec>... [--verbose] [--module-spec-delim=<delimiter>]
+  toctl validate config --module=<module-spec>... [--verbose] [--module-spec-delim=<delimiter>] [--default-module=<module-url>] [--default-tmpl-id=<template-identity>]
   toctl -h | --help
   toctl --version
 
@@ -50,10 +50,7 @@ export function buildTransformJsonInputOptions(
 export async function httpServiceHandler(
   chc: CommandHandlerContext,
 ): Promise<true | void> {
-  const {
-    "server": isServer,
-    "--port": portSpec,
-  } = chc.cliOptions;
+  const { "server": isServer } = chc.cliOptions;
   if (isServer) {
     console.log(`Template Orchestration server started`);
     const templateModules = chc.templateModules();
@@ -67,7 +64,6 @@ export async function httpServiceHandler(
     if (templateModules) {
       chc.validateTemplateModules(templateModules);
     }
-    const port = typeof portSpec === "number" ? portSpec : 8163;
     const app = server.httpServer({
       router: server.httpServiceRouter(
         {
@@ -78,7 +74,7 @@ export async function httpServiceHandler(
         },
       ),
     });
-    await app.listen({ port: port });
+    await app.listen({ port: chc.httpServicePort() });
     return true;
   }
 }
@@ -124,6 +120,7 @@ export interface CommandHandler<T extends CommandHandlerContext> {
 }
 
 export class CommandHandlerContext implements CommandHandlerContext {
+  readonly defaultHttpServicePort = 8163;
   readonly isVerbose: boolean;
 
   constructor(
@@ -133,6 +130,21 @@ export class CommandHandlerContext implements CommandHandlerContext {
   ) {
     const { "--verbose": verbose } = this.cliOptions;
     this.isVerbose = verbose ? true : false;
+  }
+
+  httpServicePort(): number {
+    const { "--port": portSpec } = this.cliOptions;
+    const port = typeof portSpec === "number"
+      ? portSpec
+      : (typeof portSpec === "string" ? Number.parseInt(portSpec)
+      : this.defaultHttpServicePort);
+    if (isNaN(port)) {
+      console.error(
+        `Invalid --port supplied (${portSpec}), defaulting to ${this.defaultHttpServicePort}.`,
+      );
+      return this.defaultHttpServicePort;
+    }
+    return port;
   }
 
   templateModules(): Record<string, string> | undefined {
