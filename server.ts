@@ -91,13 +91,22 @@ export function httpServiceRouter(
               templateIdentity: ctx.params.templateId,
             });
           } else {
-            `Template module '${ctx.params.module} not found. Available: ${
-              Object.keys(templateModules).join(",")
-            }'`;
+            ctx.response.status = 400;
+            ctx.response.body = {
+              code: 1,
+              message:
+                `Template module '${ctx.params.module} not found. Available: ${
+                  Object.keys(templateModules).join(",")
+                }'`,
+            };
           }
         }
       } else {
-        ctx.response.body = "No template modules supplied.";
+        ctx.response.status = 501;
+        ctx.response.body = {
+          code: 0,
+          message: "No pre-defined template modules supplied.",
+        };
       }
     })
     .post("/transform", async (ctx) => {
@@ -107,8 +116,17 @@ export function httpServiceRouter(
         defaultTemplateModuleURL: options?.defaultTemplateModuleURL ||
           undefined,
         defaultTemplateIdentity: options?.defaultTemplateIdentity || undefined,
-        onArbitraryModuleNotAllowed: options?.onArbitraryModuleNotAllowed ||
-          undefined,
+        onArbitraryModuleNotAllowed: (templateUrl) => {
+          const message = options?.onArbitraryModuleNotAllowed
+            ? options?.onArbitraryModuleNotAllowed(templateUrl)
+            : `arbitrary module ${templateUrl} not allowed.`;
+          ctx.response.status = 403;
+          ctx.response.body = {
+            code: 2,
+            message: message,
+          };
+          return message;
+        },
         namedTemplateModuleURL: options?.namedTemplateModuleURL ||
           ((name: string): string | undefined => {
             return templateModules ? templateModules[name] : undefined;
