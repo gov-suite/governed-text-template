@@ -216,6 +216,29 @@ export interface TransformJsonInputOptions {
   onInvalidJSON?: (inputSource: string | Uint8Array) => string | undefined;
 }
 
+export function defaultTransformJsonInputOptions(
+  templateModules?: Record<string, string>,
+  allowArbitraryModules?: boolean,
+): TransformJsonInputOptions {
+  return {
+    allowArbitraryModule: (templateUrl) => {
+      return allowArbitraryModules ? true : false;
+    },
+    defaultTemplateModuleURL: (): string => {
+      return `./template-module-debug.ts`;
+    },
+    defaultTemplateIdentity: (): string | undefined => {
+      return undefined;
+    },
+    onArbitraryModuleNotAllowed: (templateUrl: string): string => {
+      return `arbitrary modules are not allowed, unable to import ${templateUrl}`;
+    },
+    namedTemplateModuleURL: (name: string): string | undefined => {
+      return templateModules ? templateModules[name] : undefined;
+    },
+  };
+}
+
 export async function transformJsonInput(
   inputSource: string | Uint8Array,
   options?: ExecuteTemplateModuleOptions & TransformJsonInputOptions,

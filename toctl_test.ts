@@ -1,53 +1,88 @@
-import { bufIO, path, testingAsserts as ta, textproto } from "./deps-test.ts";
+import { path, shell, testingAsserts as ta } from "./deps-test.ts";
 
-Deno.test(`toctl.ts GET /transform/mod_test.single-tmpl.ts`, async () => {
-  const moduleDir = path.dirname(path.fromFileUrl(import.meta.url));
-  const p = Deno.run({
-    cmd: [
-      Deno.execPath(),
-      "run",
-      "--allow-net",
-      "--allow-read",
-      "--unstable",
-      "toctl.ts",
-      "server",
-      "--port=8163",
-    ],
-    cwd: moduleDir,
-    stdout: "piped",
-  });
+const port = 8163;
+const baseURL = `http://localhost:${port}`;
+const httpServer = shell.startListenableService({
+  port: port,
+  command: [
+    Deno.execPath(),
+    "run",
+    "--allow-net",
+    "--allow-read",
+    "--unstable",
+    "toctl.ts",
+    "server",
+    `--port=${port}`,
+    "--module=./mod_test-html-email-messages.tmpl.ts,medigy-email",
+    "--module=./mod_test.single-tmpl.ts",
+    "--module=./mod_test.multiple-tmpl.ts",
+    "--allow-arbitrary-modules",
+    "--default-module=./template-module-debug.ts",
+    "--verbose",
+  ],
+  cwd: path.dirname(path.fromFileUrl(import.meta.url)),
+});
+ta.assert(httpServer.serviceIsRunning, `Server must be started`);
+const started = await httpServer.waitForListener(10000);
+ta.assert(
+  started,
+  `Server must start listening at ${baseURL} within 10 seconds`,
+);
 
-  let serverIsRunning = true;
-  const statusPromise = p
-    .status()
-    .then((): void => {
-      serverIsRunning = false;
-    })
-    .catch((_): void => {}); // Ignores the error when closing the process.
+Deno.test(`toctl.ts GET service home page (PID ${httpServer.process.pid})`, async () => {
+  const resp = await fetch(baseURL);
+  ta.assertEquals(await resp.text(), "Template Orchestration Controller");
+});
 
-  const r = new textproto.TextProtoReader(new bufIO.BufReader(p.stdout));
-  const firstLine = await r.readLine();
-
-  ta.assert(
-    firstLine !== null &&
-      firstLine.includes(
-        "Template Orchestration service running at http://localhost:8163",
-      ),
-    "server must be started",
+Deno.test(`toctl.ts GET inspect templates (PID ${httpServer.process.pid})`, async () => {
+  const resp = await fetch(`${baseURL}/inspect/templates`);
+  ta.assertEquals(
+    await resp.text(),
+    `{"medigy-email":"./mod_test-html-email-messages.tmpl.ts","mod_test.single-tmpl.ts":"./mod_test.single-tmpl.ts","mod_test.multiple-tmpl.ts":"./mod_test.multiple-tmpl.ts"}`,
   );
+});
 
-  const url =
-    "http://localhost:8163/transform/mod_test.single-tmpl.ts?body=TestBody&heading=TestHeading";
-  const resp = await fetch("http://localhost:8163");
-  const body = await resp.text();
-  ta.assertEquals(body, "Template Orchestration Controller");
+Deno.test(`toctl.ts GET mod_test.single-tmpl.ts with two properties (PID ${httpServer.process.pid})`, async () => {
+  const resp = await fetch(
+    `${baseURL}/transform/mod_test.single-tmpl.ts?body=TestBody&heading=TestHeading`,
+  );
+  ta.assertEquals(
+    await resp.text(),
+    "<html>\n\n<head>\n    TestHeading\n</head>\n\n<body>\n    TestBody\n</body>\n\n</html>",
+  );
+});
 
-  ta.assert(serverIsRunning);
+Deno.test(`toctl.ts GET mod_test.multiple-tmpl.ts 'content1' template with two properties (PID ${httpServer.process.pid})`, async () => {
+  const resp = await fetch(
+    `${baseURL}/transform/mod_test.multiple-tmpl.ts/content1?heading1=TestHeading&body1=TestBody`,
+  );
+  ta.assertEquals(await resp.text(), "Template 1: TestHeading, TestBody");
+});
 
-  // Stops the sever and allows `p.status()` promise to resolve
-  Deno.kill(p.pid, Deno.Signal.SIGKILL);
-  await statusPromise;
-  p.stdout.close();
-  p.close();
-  ta.assert(!serverIsRunning);
+Deno.test(`toctl.ts POST medigy-email 'create-password' template with one property (PID ${httpServer.process.pid})`, async () => {
+  const resp = await fetch(`${baseURL}/transform`, {
+    method: "POST",
+    body: JSON.stringify({
+      templateName: "medigy-email",
+      templateIdentity: "create-password",
+      content: {
+        authnUrl: "https://www.medigy.com/x/reset-password",
+      },
+    }),
+  });
+  ta.assertEquals(
+    await resp.text(),
+    Deno.readTextFileSync("mod_test-email-message-01.html-output.golden"),
+  );
+});
+
+Deno.test({
+  name: `toctl.ts stop server (PID ${httpServer.process.pid})`,
+  fn: async () => {
+    await httpServer.stop();
+  },
+  // because httpServer is started outside of this method, we need to let Deno know
+  // not to check for resource leaks
+  sanitizeOps: false,
+  sanitizeResources: false,
 });

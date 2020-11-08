@@ -1,4 +1,5 @@
-import { colors, docopt, fs, oak, path } from "./deps.ts";
+import { colors, docopt, fs, path } from "./deps.ts";
+import * as server from "./server.ts";
 import * as tm from "./template-module.ts";
 
 const docoptSpec = `
@@ -7,8 +8,8 @@ Template Orchestration Controller ${
 }.
 
 Usage:
-  toctl server [--port=<port>] [--module=<module-spec>]... [--default-module=<module-url>] [--default-tmpl-id=<template-identity>] [--verbose] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>]
-  toctl transform json [--default-module=<module-url>] [--default-tmpl-id=<template-identity>]
+  toctl server [--port=<port>] [--module=<module-spec>]... [--default-module=<module-url>] [--default-tmpl-id=<template-identity>] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>] [--verbose]
+  toctl transform json [--default-module=<module-url>] [--default-tmpl-id=<template-identity>] [--allow-arbitrary-modules] 
   toctl validate config --module=<module-spec>... [--verbose] [--module-spec-delim=<delimiter>]
   toctl -h | --help
   toctl --version
@@ -22,112 +23,61 @@ Options:
   --verbose         Be explicit about what's going on
 `;
 
-function httpServiceMiddleware(
+export function buildTransformJsonInputOptions(
   chc: CommandHandlerContext,
-  app: oak.Application,
-): void {
-  if (chc.isVerbose) {
-    app.use(async (ctx, next) => {
-      await next();
-      const rt = ctx.response.headers.get("X-Response-Time");
-      console.log(`${ctx.request.method} ${ctx.request.url} - ${rt}`);
-    });
-  }
-
-  // add telemetry for each request
-  app.use(async (ctx, next) => {
-    const start = Date.now();
-    await next();
-    const ms = Date.now() - start;
-    ctx.response.headers.set("X-Response-Time", `${ms}ms`);
-  });
-}
-
-function httpServiceRouter(chc: CommandHandlerContext): oak.Router {
+): tm.TransformJsonInputOptions {
   const { "--allow-arbitrary-modules": allowArbitraryModules } = chc.cliOptions;
   const templateModules = chc.templateModules();
-  if (chc.isVerbose && chc.defaultTemplateModule()) {
-    console.log("Default template module:", chc.defaultTemplateModule());
-  }
-  if (chc.isVerbose && templateModules) {
-    console.log("Pre-defined template modules:");
-    console.dir(templateModules);
-  }
-  if (templateModules) {
-    chc.validateTemplateModules(templateModules);
-  }
-  const router = new oak.Router();
-  router
-    .get("/", (ctx) => {
-      ctx.response.body = "Template Orchestration Controller";
-    })
-    // TODO: add https://github.com/marcopacini/ts-prometheus based /metrics route
-    // TODO: add https://tools.ietf.org/id/draft-inadarei-api-health-check-01.html based /health route
-    // TODO: add https://github.com/singhcool/deno-swagger-doc based OpenAPI generator
-    .get("/transform/:module/:templateId?", async (ctx) => {
-      if (templateModules) {
-        if (ctx.params && ctx.params.module) {
-          const templateURL = templateModules[ctx.params.module];
-          if (templateURL) {
-            const content: Record<string, unknown> = {};
-            ctx.request.url.searchParams.forEach((v, k) => content[k] = v);
-            ctx.response.body = await tm.executeTemplateModule({
-              srcURL: templateURL,
-              content: content,
-              templateIdentity: ctx.params.templateId,
-            });
-          } else {
-            `Template modules '${ctx.params.module} not found. Available: ${
-              Object.keys(templateModules).join(",")
-            }'`;
-          }
-        }
-      } else {
-        ctx.response.body = "No modules supplied using --module arguments.";
-      }
-    })
-    .post("/transform", async (ctx) => {
-      const result = ctx.request.body({ type: "text" });
-      ctx.response.body = await tm.transformJsonInput(await result.value, {
-        allowArbitraryModule: (templateUrl) => {
-          return allowArbitraryModules ? true : false;
-        },
-        defaultTemplateModuleURL: (): string => {
-          return chc.defaultTemplateModule() || `./template-module-debug.ts`;
-        },
-        defaultTemplateIdentity: (): string | undefined => {
-          return chc.defaultTemplateIdentity();
-        },
-        onArbitraryModuleNotAllowed: (templateUrl: string): string => {
-          return `Server was not started with --allow-arbitrary-modules, can only use pre-defined modules (not ${templateUrl})`;
-        },
-        namedTemplateModuleURL: (name: string): string | undefined => {
-          return templateModules ? templateModules[name] : undefined;
-        },
-      });
-    });
-  return router;
+  return {
+    allowArbitraryModule: (templateUrl) => {
+      return allowArbitraryModules ? true : false;
+    },
+    defaultTemplateModuleURL: (): string => {
+      return chc.defaultTemplateModule() || `./template-module-debug.ts`;
+    },
+    defaultTemplateIdentity: (): string | undefined => {
+      return chc.defaultTemplateIdentity();
+    },
+    onArbitraryModuleNotAllowed: (templateUrl: string): string => {
+      return `Server was not started with --allow-arbitrary-modules, can only use pre-defined modules (not ${templateUrl})`;
+    },
+    namedTemplateModuleURL: (name: string): string | undefined => {
+      return templateModules ? templateModules[name] : undefined;
+    },
+  };
 }
 
 export async function httpServiceHandler(
   chc: CommandHandlerContext,
 ): Promise<true | void> {
   const {
-    "server": server,
+    "server": isServer,
     "--port": portSpec,
   } = chc.cliOptions;
-  if (server) {
+  if (isServer) {
+    console.log(`Template Orchestration server started`);
+    const templateModules = chc.templateModules();
+    if (chc.isVerbose && chc.defaultTemplateModule()) {
+      console.log("Default template module:", chc.defaultTemplateModule());
+    }
+    if (chc.isVerbose && templateModules) {
+      console.log("Pre-defined template modules:");
+      console.dir(templateModules);
+    }
+    if (templateModules) {
+      chc.validateTemplateModules(templateModules);
+    }
     const port = typeof portSpec === "number" ? portSpec : 8163;
-    const app = new oak.Application();
-    app.addEventListener("listen", () => {
-      console.log(
-        `Template Orchestration service running at http://localhost:${port}`,
-      );
+    const app = server.httpServer({
+      router: server.httpServiceRouter(
+        {
+          templateModules: () => {
+            return templateModules;
+          },
+          ...buildTransformJsonInputOptions(chc),
+        },
+      ),
     });
-    httpServiceMiddleware(chc, app);
-    const router = httpServiceRouter(chc);
-    app.use(router.routes());
-    app.use(router.allowedMethods());
     await app.listen({ port: port });
     return true;
   }
@@ -140,22 +90,8 @@ export async function transformStdInJsonHandler(
   if (transform && json) {
     const input = Deno.readAllSync(Deno.stdin);
     if (!input || input.length > 0) {
-      const preDefinedModules = chc.templateModules();
       console.log(
-        await tm.transformJsonInput(input, {
-          allowArbitraryModule: (templateUrl) => {
-            return true;
-          },
-          defaultTemplateModuleURL: (): string => {
-            return chc.defaultTemplateModule() || `./template-module-debug.ts`;
-          },
-          defaultTemplateIdentity: (): string | undefined => {
-            return chc.defaultTemplateIdentity();
-          },
-          namedTemplateModuleURL: (name: string): string | undefined => {
-            return preDefinedModules ? preDefinedModules[name] : undefined;
-          },
-        }),
+        await tm.transformJsonInput(input, buildTransformJsonInputOptions(chc)),
       );
     } else {
       console.error("No JSON provided in STDIN");
