@@ -76,6 +76,24 @@ Deno.test(`toctl.ts POST medigy-email 'create-password' template with one proper
   );
 });
 
+Deno.test(`toctl.ts POST medigy-email 'create-password' template with invalid property (PID ${httpServer.process.pid})`, async () => {
+  const resp = await fetch(`${baseURL}/transform`, {
+    method: "POST",
+    body: JSON.stringify({
+      templateName: "medigy-email",
+      templateIdentity: "create-password",
+      content: {
+        badData: 1,
+      },
+    }),
+  });
+  ta.assertEquals(resp.status, 400, "Expected error HTTP status");
+  ta.assertEquals(
+    await resp.text(),
+    'unexpected content for template create-password: {"badData":1}',
+  );
+});
+
 Deno.test({
   name: `toctl.ts stop server (PID ${httpServer.process.pid})`,
   fn: async () => {
