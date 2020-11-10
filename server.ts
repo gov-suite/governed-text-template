@@ -127,6 +127,17 @@ export function httpServiceRouter(
           };
           return message;
         },
+        onInvalidJSON: (inputSource) => {
+          const message = options?.onInvalidJSON
+            ? options?.onInvalidJSON(inputSource)
+            : `invalid JSON: ${JSON.stringify(inputSource)}.`;
+          ctx.response.status = 400;
+          ctx.response.body = {
+            code: 3,
+            message: message,
+          };
+          return message;
+        },
         namedTemplateModuleURL: options?.namedTemplateModuleURL ||
           ((name: string): string | undefined => {
             return templateModules ? templateModules[name] : undefined;
