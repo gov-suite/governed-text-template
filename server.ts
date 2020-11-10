@@ -139,15 +139,14 @@ export function httpServiceRouter(
 export function httpServer(
   options: {
     router: oak.Router;
-    port?: number;
+    port: number;
     mwOptions?: HttpServiceMiddlewareOptions;
   },
 ): oak.Application {
-  const port = options.port || 8163;
   const app = new oak.Application();
   app.addEventListener("listen", () => {
     console.log(
-      `Template Orchestration service listening on http://localhost:${port}`,
+      `Template Orchestration service listening on http://localhost:${options.port}`,
     );
   });
   httpServiceMiddleware(

@@ -65,6 +65,7 @@ export async function httpServiceHandler(
       chc.validateTemplateModules(templateModules);
     }
     const app = server.httpServer({
+      port: chc.httpServicePort(),
       router: server.httpServiceRouter(
         {
           templateModules: () => {
