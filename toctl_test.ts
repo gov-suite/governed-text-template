@@ -1,4 +1,5 @@
-import { path, shell, testingAsserts as ta } from "./deps-test.ts";
+import { testingAsserts as ta } from "./deps-test.ts";
+import { govnSvcHelpers as gsh, path, shell } from "./deps.ts";
 
 const port = 8163;
 const baseURL = `http://localhost:${port}`;
@@ -7,8 +8,7 @@ const httpServer = shell.startListenableService({
   command: [
     Deno.execPath(),
     "run",
-    "--allow-net",
-    "--allow-read",
+    "-A",
     "--unstable",
     "toctl.ts",
     "server",
@@ -26,7 +26,9 @@ ta.assert(httpServer.serviceIsRunning, `Server must be started`);
 const started = await httpServer.waitForListener(10000);
 ta.assert(
   started,
-  `Server must start listening at ${baseURL} within 10 seconds`,
+  `Server must start listening at ${baseURL} within 10 seconds:\n ==> ${
+    httpServer.denoRunOpts.cmd.join(" ")
+  }`,
 );
 
 Deno.test(`toctl.ts GET service home page (PID ${httpServer.process.pid})`, async () => {
@@ -34,11 +36,18 @@ Deno.test(`toctl.ts GET service home page (PID ${httpServer.process.pid})`, asyn
   ta.assertEquals(await resp.text(), "Template Orchestration Controller");
 });
 
-Deno.test(`toctl.ts GET inspect templates (PID ${httpServer.process.pid})`, async () => {
-  const resp = await fetch(`${baseURL}/inspect/templates`);
-  ta.assertEquals(
-    await resp.text(),
-    `{"medigy-email":"./mod_test-html-email-messages.tmpl.ts","mod_test.single-tmpl.ts":"./mod_test.single-tmpl.ts","mod_test.multiple-tmpl.ts":"./mod_test.multiple-tmpl.ts"}`,
+Deno.test(`toctl.ts GET service health (PID ${httpServer.process.pid})`, async () => {
+  const resp = await fetch(`${baseURL}/health`);
+  const health = await resp.json();
+  ta.assert(gsh.isHealthy(health));
+  ta.assert(gsh.isServiceHealthComponents(health));
+  ta.assertArrayIncludes(
+    Object.keys(health.details),
+    [
+      "template:medigy-email",
+      "template:mod_test.single-tmpl.ts",
+      "template:mod_test.multiple-tmpl.ts",
+    ],
   );
 });
 

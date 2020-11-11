@@ -1,4 +1,5 @@
-import { path, testingAsserts as ta } from "./deps-test.ts";
+import { testingAsserts as ta } from "./deps-test.ts";
+import { path } from "./deps.ts";
 import * as mod from "./mod.ts";
 
 function testFilePath(relTestFileName: string): string {

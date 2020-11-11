@@ -1,11 +1,17 @@
-import { colors, docopt, fs, path } from "./deps.ts";
+import { colors, docopt, govnSvcHelpers as gsh, path } from "./deps.ts";
 import * as server from "./server.ts";
 import * as tm from "./template-module.ts";
 
+export async function determineVersion(importMetaURL: string): Promise<string> {
+  return gsh.determineVersionFromRepoTag(
+    importMetaURL,
+    { repoIdentity: "gov-suite/governed-text-template" },
+  );
+}
+
+const toctlVersion = await determineVersion(import.meta.url);
 const docoptSpec = `
-Template Orchestration Controller ${
-  determineVersion(import.meta.url, import.meta.main)
-}.
+Template Orchestration Controller ${toctlVersion}.
 
 Usage:
   toctl server [--port=<port>] [--module=<module-spec>]... [--default-module=<module-url>] [--default-tmpl-id=<template-identity>] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>] [--verbose]
@@ -68,8 +74,14 @@ export async function httpServiceHandler(
       port: chc.httpServicePort(),
       router: server.httpServiceRouter(
         {
+          serviceVersion: toctlVersion,
           templateModules: () => {
             return templateModules;
+          },
+          templateModulesHealth: async () => {
+            return templateModules
+              ? await chc.templateModulesHealthStatus(templateModules)
+              : { details: {} };
           },
           ...buildTransformJsonInputOptions(chc),
         },
@@ -177,6 +189,37 @@ export class CommandHandlerContext implements CommandHandlerContext {
       : undefined;
   }
 
+  async templateModulesHealthStatus(
+    templateModules: Record<string, string>,
+  ): Promise<gsh.ServiceHealthComponents> {
+    const result: gsh.ServiceHealthComponents = {
+      details: {},
+    };
+    for (const entry of Object.entries(templateModules)) {
+      const [name, url] = entry;
+      const [_, diagnostic] = await tm.importTemplateModuleHandlers({
+        srcURL: url,
+      });
+      if (diagnostic) {
+        result.details[`template:${name}`] = [gsh.unhealthyComponent("fail", {
+          componentId: name,
+          componentType: "component",
+          output: diagnostic,
+          time: new Date(),
+          links: {},
+        })];
+      } else {
+        result.details[`template:${name}`] = [gsh.healthyComponent({
+          componentId: name,
+          componentType: "component",
+          time: new Date(),
+          links: {},
+        })];
+      }
+    }
+    return result;
+  }
+
   async validateTemplateModules(
     templateModules: Record<string, string>,
   ): Promise<void> {
@@ -202,31 +245,12 @@ export class CommandHandlerContext implements CommandHandlerContext {
   }
 }
 
-export function determineVersion(
-  importMetaURL: string,
-  isMain: boolean,
-  repoVersionRegExp =
-    /gov-suite\/governed-text-template\/v?(?<version>\d+\.\d+\.\d+)\//,
-): string {
-  const fileURL = importMetaURL.startsWith("file://")
-    ? importMetaURL.substr("file://".length)
-    : importMetaURL;
-  if (fs.existsSync(fileURL)) {
-    return `v0.0.0-local${isMain ? ".main" : ""}`;
-  }
-  const matched = importMetaURL.match(repoVersionRegExp);
-  if (matched) {
-    return `v${matched.groups!["version"]}`;
-  }
-  return `v0.0.0-remote(no version tag/branch in ${importMetaURL})`;
-}
-
 export async function versionHandler(
   ctx: CommandHandlerContext,
 ): Promise<true | void> {
   const { "--version": version } = ctx.cliOptions;
   if (version) {
-    console.log(determineVersion(ctx.calledFromMetaURL, ctx.calledFromMain));
+    console.log(toctlVersion);
     return true;
   }
 }
