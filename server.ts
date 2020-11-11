@@ -1,59 +1,5 @@
-import { colors, govnSvcHealth as gsh, oak } from "./deps.ts";
+import { oak, oakHelpers as oakH } from "./deps.ts";
 import * as tm from "./template-module.ts";
-
-const responseTimeHeaderName = "X-Response-Time";
-
-export interface AccessReport {
-  readonly responseTime: number;
-}
-
-export interface AccessReporter {
-  (ctx: oak.Context<Record<string, unknown>>, report: AccessReport): void;
-}
-
-export function defaultAccessReporter(
-  ctx: oak.Context<Record<string, unknown>>,
-  report: AccessReport,
-): void {
-  console.log(
-    `${colors.green(ctx.request.method)} ${
-      colors.yellow(ctx.request.url.toString())
-    } - ${colors.gray(report.responseTime.toString())}`,
-  );
-}
-
-export interface HttpServiceMiddlewareOptions {
-  readonly accessReporter?: AccessReporter;
-}
-
-export function httpServiceMiddleware(
-  app: oak.Application,
-  options?: {
-    accessReporter?: AccessReporter;
-  },
-): void {
-  if (options?.accessReporter) {
-    const reporter = options?.accessReporter;
-    app.use(async (ctx, next) => {
-      await next();
-      reporter(
-        ctx,
-        {
-          responseTime: Number.parseInt(
-            ctx.response.headers.get(responseTimeHeaderName) || "-1",
-          ),
-        },
-      );
-    });
-  }
-
-  app.use(async (ctx, next) => {
-    const start = Date.now();
-    await next();
-    const responseTime = Date.now() - start;
-    ctx.response.headers.set(responseTimeHeaderName, `${responseTime}`);
-  });
-}
 
 export function httpServiceRouter(
   options?: tm.TransformJsonInputOptions & {
@@ -140,7 +86,7 @@ export function httpServer(
   options: {
     router: oak.Router;
     port: number;
-    mwOptions?: HttpServiceMiddlewareOptions;
+    mwOptions?: oakH.TypicalMiddlewareOptions;
   },
 ): oak.Application {
   const app = new oak.Application();
@@ -150,9 +96,9 @@ export function httpServer(
         "localhost"}:${event.port}`,
     );
   });
-  httpServiceMiddleware(
+  oakH.registerTypicalMiddleware(
     app,
-    options.mwOptions || { accessReporter: defaultAccessReporter },
+    options.mwOptions || { accessReporter: oakH.defaultAccessReporter },
   );
   app.use(options.router.routes());
   app.use(options.router.allowedMethods());
