@@ -1,4 +1,4 @@
-import { colors, govnSvcHelpers as gsh, oak } from "./deps.ts";
+import { colors, govnSvcHealth as gsh, oak } from "./deps.ts";
 import * as tm from "./template-module.ts";
 
 const responseTimeHeaderName = "X-Response-Time";
@@ -57,9 +57,7 @@ export function httpServiceMiddleware(
 
 export function httpServiceRouter(
   options?: tm.TransformJsonInputOptions & {
-    serviceVersion: string;
     templateModules?: () => Record<string, string> | undefined;
-    templateModulesHealth?: () => Promise<gsh.ServiceHealthComponents>;
   },
 ): oak.Router {
   const templateModules = options?.templateModules
@@ -72,20 +70,6 @@ export function httpServiceRouter(
     })
     // TODO: add https://github.com/marcopacini/ts-prometheus based /metrics route
     // TODO: add https://github.com/singhcool/deno-swagger-doc based OpenAPI generator
-    .get("/health", async (ctx) => {
-      const hs = gsh.healthyService(
-        {
-          version: "1",
-          releaseID: options?.serviceVersion || "v?.?.?",
-          ...(options?.templateModulesHealth
-            ? await options?.templateModulesHealth()
-            : {}),
-        },
-      );
-      const ep = gsh.healthStatusEndpoint(hs);
-      Object.entries(ep).forEach((e) => ctx.response.headers.set(e[0], e[1]));
-      ctx.response.body = ep.body;
-    })
     .get("/transform/:module/:templateId?", async (ctx) => {
       if (templateModules) {
         if (ctx.params && ctx.params.module) {

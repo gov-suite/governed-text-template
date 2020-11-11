@@ -1,5 +1,5 @@
 import { testingAsserts as ta } from "./deps-test.ts";
-import { govnSvcHelpers as gsh, path, shell } from "./deps.ts";
+import { govnSvcHealth as gsh, path, shell } from "./deps.ts";
 
 const port = 8163;
 const baseURL = `http://localhost:${port}`;

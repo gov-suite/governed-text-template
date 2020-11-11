@@ -1,9 +1,16 @@
-import { colors, docopt, govnSvcHelpers as gsh, path } from "./deps.ts";
+import {
+  colors,
+  docopt,
+  govnSvcHealth as gsh,
+  govnSvcVersion as gsv,
+  oakHelpers as oakH,
+  path,
+} from "./deps.ts";
 import * as server from "./server.ts";
 import * as tm from "./template-module.ts";
 
 export async function determineVersion(importMetaURL: string): Promise<string> {
-  return gsh.determineVersionFromRepoTag(
+  return gsv.determineVersionFromRepoTag(
     importMetaURL,
     { repoIdentity: "gov-suite/governed-text-template" },
   );
@@ -74,18 +81,27 @@ export async function httpServiceHandler(
       port: chc.httpServicePort(),
       router: server.httpServiceRouter(
         {
-          serviceVersion: toctlVersion,
           templateModules: () => {
             return templateModules;
-          },
-          templateModulesHealth: async () => {
-            return templateModules
-              ? await chc.templateModulesHealthStatus(templateModules)
-              : { details: {} };
           },
           ...buildTransformJsonInputOptions(chc),
         },
       ),
+    });
+    oakH.registerHealthRoute(app, {
+      serviceVersion: () => {
+        return toctlVersion;
+      },
+      endpoint: async () => {
+        const hs = gsh.healthyService({
+          version: "1",
+          releaseID: toctlVersion,
+          ...(templateModules
+            ? await chc.templateModulesHealthStatus(templateModules)
+            : { details: {} }),
+        });
+        return gsh.healthStatusEndpoint(hs);
+      },
     });
     await app.listen({ port: chc.httpServicePort() });
     return true;
@@ -206,14 +222,14 @@ export class CommandHandlerContext implements CommandHandlerContext {
           componentType: "component",
           output: diagnostic,
           time: new Date(),
-          links: {},
+          links: { templateURL: url },
         })];
       } else {
         result.details[`template:${name}`] = [gsh.healthyComponent({
           componentId: name,
           componentType: "component",
           time: new Date(),
-          links: {},
+          links: { templateURL: url },
         })];
       }
     }
