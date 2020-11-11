@@ -149,7 +149,7 @@ export interface CommandHandler<T extends CommandHandlerContext> {
 }
 
 export class CommandHandlerContext implements CommandHandlerContext {
-  readonly defaultHttpServicePort = 8163;
+  readonly defaultHttpServicePort = 8179;
   readonly isVerbose: boolean;
 
   constructor(

@@ -144,9 +144,10 @@ export function httpServer(
   },
 ): oak.Application {
   const app = new oak.Application();
-  app.addEventListener("listen", () => {
+  app.addEventListener("listen", (event) => {
     console.log(
-      `Template Orchestration service listening on http://localhost:${options.port}`,
+      `Template Orchestration service listening on http://${event.hostname ||
+        "localhost"}:${event.port}`,
     );
   });
   httpServiceMiddleware(

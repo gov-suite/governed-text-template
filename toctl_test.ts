@@ -1,7 +1,7 @@
 import { testingAsserts as ta } from "./deps-test.ts";
 import { govnSvcHealth as gsh, path, shell } from "./deps.ts";
 
-const port = 8163;
+const port = 8178;
 const baseURL = `http://localhost:${port}`;
 const httpServer = shell.startListenableService({
   port: port,

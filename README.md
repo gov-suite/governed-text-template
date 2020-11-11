@@ -118,20 +118,21 @@ The `mod.ts` file allows template processing as a Deno based library but the `to
 
 To see what's available, try this:
 
-```
+```bash
 ❯ deno-run toctl.ts --help
-Template Orchestration Controller v0.0.0-local.main.
+Template Orchestration Controller v0.4.3-local.
 
 Usage:
-  toctl server [--port=<port>] [--module=<module-spec>]... [--verbose] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>]
-  toctl transform json
-  toctl validate config --module=<module-spec>... [--verbose] [--module-spec-delim=<delimiter>]
+  toctl server [--port=<port>] [--module=<module-spec>]... [--default-module=<module-url>] [--default-tmpl-id=<template-identity>] [--allow-arbitrary-modules] [--module-spec-delim=<delimiter>] [--verbose]
+  toctl transform json [--default-module=<module-url>] [--default-tmpl-id=<template-identity>] [--allow-arbitrary-modules] 
+  toctl validate config --module=<module-spec>... [--verbose] [--module-spec-delim=<delimiter>] [--default-module=<module-url>] [--default-tmpl-id=<template-identity>]
   toctl -h | --help
   toctl --version
 
 Options:
   -h --help         Show this screen
   <module-spec>     A pre-defined module template (with an optional name like --module="./x.ts,x")
+  <module-url>      A module template URL
   <delimiter>       The character(s) used to separate pre-defined template module name and URL (default ",")
   --version         Show version
   --verbose         Be explicit about what's going on
@@ -171,22 +172,29 @@ deno-run toctl.ts server --verbose --module=./mod_test-html-email-messages.tmpl.
 After you run the above, you'll see:
 
 ```bash
-Template Orchestration service running at http://localhost:8163
+Template Orchestration server started
+Default template module: ./template-module-debug.ts
 Pre-defined template modules:
 {
   "medigy-email": "./mod_test-html-email-messages.tmpl.ts",
   "mod_test.single-tmpl.ts": "./mod_test.single-tmpl.ts",
   "mod_test.multiple-tmpl.ts": "./mod_test.multiple-tmpl.ts"
 }
+Template Orchestration service listening on http://localhost:8179
+medigy-email: ./mod_test-html-email-messages.tmpl.ts OK
+mod_test.single-tmpl.ts: ./mod_test.single-tmpl.ts OK
+mod_test.multiple-tmpl.ts: ./mod_test.multiple-tmpl.ts OK
 ```
 
 Now, you can then use the following in a browser or cURL:
 
 ```
-http://localhost:8163/transform/medigy-email/create-password?authnUrl=this
-http://localhost:8163/transform/medigy-email/reset-password?authnUrl=this
-http://localhost:8163/transform/mod_test.single-tmpl.ts?body=TestBody&heading=TestHeading
-http://localhost:8163/transform/mod_test.multiple-tmpl.ts/content1?heading1=TestHeading&body1=TestBody
+http://localhost:8179/health
+http://localhost:8179/health/version
+http://localhost:8179/transform/medigy-email/create-password?authnUrl=this
+http://localhost:8179/transform/medigy-email/reset-password?authnUrl=this
+http://localhost:8179/transform/mod_test.single-tmpl.ts?body=TestBody&heading=TestHeading
+http://localhost:8179/transform/mod_test.multiple-tmpl.ts/content1?heading1=TestHeading&body1=TestBody
 ```
 
 ## HTTP Service Usage with arbitrary templates (might be unsafe)
@@ -201,7 +209,7 @@ In a separate window, try the service using [mod_test.single-in.json](mod_test.s
 
 ```bash
 cd $HOME/workspaces/github.com/shah/ts-safe-template
-curl -H "Content-Type: application/json" --data @mod_test.single-in.json http://localhost:8163/transform
+curl -H "Content-Type: application/json" --data @mod_test.single-in.json http://localhost:8179/transform
 ```
 
 If the JSON provided in the POST is the following:
