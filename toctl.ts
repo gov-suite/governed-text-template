@@ -88,6 +88,8 @@ export async function httpServiceHandler(
         },
       ),
     });
+    // TODO: add https://github.com/marcopacini/ts-prometheus based /metrics route
+    // TODO: add https://github.com/singhcool/deno-swagger-doc based OpenAPI generator
     oakH.registerHealthRoute(app, {
       serviceVersion: () => {
         return toctlVersion;
