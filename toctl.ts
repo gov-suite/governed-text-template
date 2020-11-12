@@ -67,13 +67,6 @@ export async function httpServiceHandler(
   if (isServer) {
     console.log(`Template Orchestration server started`);
     const templateModules = chc.templateModules();
-    if (chc.isVerbose && chc.defaultTemplateModule()) {
-      console.log("Default template module:", chc.defaultTemplateModule());
-    }
-    if (chc.isVerbose && templateModules) {
-      console.log("Pre-defined template modules:");
-      console.dir(templateModules);
-    }
     if (templateModules) {
       chc.validateTemplateModules(templateModules);
     }
@@ -213,27 +206,44 @@ export class CommandHandlerContext implements CommandHandlerContext {
     const result: gsh.ServiceHealthComponents = {
       details: {},
     };
+    const addStatus = (
+      tmplName: string,
+      tmplUrl: string,
+      diagnostic?: string,
+    ): void => {
+      const component: Omit<gsh.HealthyServiceHealthComponentStatus, "status"> =
+        {
+          componentId: tmplName,
+          componentType: "component",
+          time: new Date(),
+          links: { templateURL: tmplUrl },
+        };
+      if (diagnostic) {
+        result.details[`template:${tmplName}`] = [
+          gsh.unhealthyComponent("fail", {
+            ...component,
+            output: diagnostic,
+          }),
+        ];
+      } else {
+        result.details[`template:${tmplName}`] = [
+          gsh.healthyComponent(component),
+        ];
+      }
+    };
     for (const entry of Object.entries(templateModules)) {
       const [name, url] = entry;
       const [_, diagnostic] = await tm.importTemplateModuleHandlers({
         srcURL: url,
       });
-      if (diagnostic) {
-        result.details[`template:${name}`] = [gsh.unhealthyComponent("fail", {
-          componentId: name,
-          componentType: "component",
-          output: diagnostic,
-          time: new Date(),
-          links: { templateURL: url },
-        })];
-      } else {
-        result.details[`template:${name}`] = [gsh.healthyComponent({
-          componentId: name,
-          componentType: "component",
-          time: new Date(),
-          links: { templateURL: url },
-        })];
-      }
+      addStatus(name, url, diagnostic);
+    }
+    const defaultTmplUrl = this.defaultTemplateModule();
+    if (defaultTmplUrl) {
+      const [_, diagnostic] = await tm.importTemplateModuleHandlers({
+        srcURL: defaultTmplUrl,
+      });
+      addStatus("DEFAULT", defaultTmplUrl, diagnostic);
     }
     return result;
   }
@@ -241,23 +251,23 @@ export class CommandHandlerContext implements CommandHandlerContext {
   async validateTemplateModules(
     templateModules: Record<string, string>,
   ): Promise<void> {
-    for (const entry of Object.entries(templateModules)) {
-      const [name, url] = entry;
-      const [_, diagnostic] = await tm.importTemplateModuleHandlers({
-        srcURL: url,
-      });
-      if (diagnostic) {
-        console.error(
-          `[${colors.yellow(name)}: ${colors.brightWhite(url)}] ${
-            colors.red(diagnostic)
-          }`,
-        );
-      } else if (this.isVerbose) {
-        console.log(
-          `${colors.yellow(name)}: ${colors.brightWhite(url)} ${
-            colors.green("OK")
-          }`,
-        );
+    const health = await this.templateModulesHealthStatus(templateModules);
+    for (const entry of Object.entries(health.details)) {
+      const [name, componentStates] = entry;
+      for (const state of componentStates) {
+        if (gsh.isServiceHealthDiagnosable(state)) {
+          console.error(
+            `${colors.yellow(state.componentId)}: ${
+              colors.brightWhite(state.links["templateURL"])
+            } ${colors.red(state.output)}`,
+          );
+        } else if (this.isVerbose) {
+          console.log(
+            `${colors.yellow(state.componentId)}: ${
+              colors.brightWhite(state.links["templateURL"])
+            } ${colors.green("OK")}`,
+          );
+        }
       }
     }
   }
