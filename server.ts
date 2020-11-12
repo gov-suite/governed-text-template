@@ -46,7 +46,7 @@ export function httpServiceRouter(
             ctx.response.body = {
               code: 1,
               message:
-                `Template module '${ctx.params.module} not found. Available: ${
+                `Template module '${ctx.params.module}' not found. Available: ${
                   Object.keys(templateModules).join(",")
                 }'`,
             };
