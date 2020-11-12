@@ -1,6 +1,21 @@
 import { oak, oakHelpers as oakH } from "./deps.ts";
 import * as tm from "./template-module.ts";
 
+export function executeTemplateModuleOptions(
+  ctx: oak.RouterContext,
+): tm.ExecuteTemplateModuleOptions {
+  return {
+    onContentGuardFailure: () => {
+      ctx.response.status = 400;
+      return undefined; // use the default message
+    },
+    onTemplateIdGuardFailure: () => {
+      ctx.response.status = 410;
+      return undefined; // use the default message
+    },
+  };
+}
+
 export function httpServiceRouter(
   options?: tm.TransformJsonInputOptions & {
     templateModules?: () => Record<string, string> | undefined;
@@ -14,8 +29,6 @@ export function httpServiceRouter(
     .get("/", (ctx) => {
       ctx.response.body = "Template Orchestration Controller";
     })
-    // TODO: add https://github.com/marcopacini/ts-prometheus based /metrics route
-    // TODO: add https://github.com/singhcool/deno-swagger-doc based OpenAPI generator
     .get("/transform/:module/:templateId?", async (ctx) => {
       if (templateModules) {
         if (ctx.params && ctx.params.module) {
@@ -27,7 +40,7 @@ export function httpServiceRouter(
               srcURL: templateURL,
               content: content,
               templateIdentity: ctx.params.templateId,
-            });
+            }, executeTemplateModuleOptions(ctx));
           } else {
             ctx.response.status = 400;
             ctx.response.body = {
@@ -65,10 +78,6 @@ export function httpServiceRouter(
           };
           return message;
         },
-        onContentGuardFailure: () => {
-          ctx.response.status = 400;
-          return undefined; // use the default message
-        },
         onInvalidJSON: () => {
           ctx.response.status = 400;
           return undefined; // use the default message
@@ -77,6 +86,7 @@ export function httpServiceRouter(
           ((name: string): string | undefined => {
             return templateModules ? templateModules[name] : undefined;
           }),
+        ...executeTemplateModuleOptions(ctx),
       });
     });
   return router;
