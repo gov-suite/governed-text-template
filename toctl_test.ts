@@ -1,42 +1,55 @@
 import { testingAsserts as ta } from "./deps-test.ts";
 import { govnSvcHealth as gsh, path, shell } from "./deps.ts";
 
-const port = 8178;
-const baseURL = `http://localhost:${port}`;
-const httpServer = shell.startListenableService({
-  port: port,
-  command: [
-    Deno.execPath(),
-    "run",
-    "-A",
-    "--unstable",
-    "toctl.ts",
-    "server",
-    `--port=${port}`,
-    "--module=./mod_test-html-email-messages.tmpl.ts,medigy-email",
-    "--module=./mod_test.single-tmpl.ts",
-    "--module=./mod_test.multiple-tmpl.ts",
-    "--allow-arbitrary-modules",
-    "--default-module=./template-module-debug.ts",
-    "--verbose",
-  ],
-  cwd: path.dirname(path.fromFileUrl(import.meta.url)),
-});
-ta.assert(httpServer.serviceIsRunning, `Server must be started`);
-const started = await httpServer.waitForListener(10000);
-ta.assert(
-  started,
-  `Server must start listening at ${baseURL} within 10 seconds:\n ==> ${
-    httpServer.denoRunOpts.cmd.join(" ")
-  }`,
-);
+// This unit test can be run two ways:
+// 1. With an auto-started child server (default)
+// 2. Against an externally started server (set using GTT_TEST_BASE_URL env var)
+//    export GTT_TEST_BASE_URL=http://localhost:8179
+//    deno test -A --unstable
 
-Deno.test(`toctl.ts GET service home page (PID ${httpServer.process.pid})`, async () => {
-  const resp = await fetch(baseURL);
+let baseURL = Deno.env.get("GTT_TEST_BASE_URL");
+let childHttpServer: shell.RunListenableServiceResult | undefined = undefined;
+let httpServerCaption = baseURL;
+
+if (!baseURL) {
+  const port = 8178;
+  baseURL = `http://localhost:${port}`;
+  childHttpServer = shell.startListenableService({
+    port: port,
+    command: [
+      Deno.execPath(),
+      "run",
+      "-A",
+      "--unstable",
+      "toctl.ts",
+      "server",
+      `--port=${port}`,
+      "--module=./mod_test-html-email-messages.tmpl.ts,medigy-email",
+      "--module=./mod_test.single-tmpl.ts",
+      "--module=./mod_test.multiple-tmpl.ts",
+      "--allow-arbitrary-modules",
+      "--default-module=./template-module-debug.ts",
+      "--verbose",
+    ],
+    cwd: path.dirname(path.fromFileUrl(import.meta.url)),
+  });
+  ta.assert(childHttpServer.serviceIsRunning, `Server must be started`);
+  const started = await childHttpServer.waitForListener(10000);
+  ta.assert(
+    started,
+    `Server must start listening at ${baseURL} within 10 seconds:\n ==> ${
+      childHttpServer.denoRunOpts.cmd.join(" ")
+    }`,
+  );
+  httpServerCaption = `${baseURL} PID ${childHttpServer.process.pid}`;
+}
+
+Deno.test(`toctl.ts GET service home page (${httpServerCaption})`, async () => {
+  const resp = await fetch(`${baseURL}`);
   ta.assertEquals(await resp.text(), "Template Orchestration Controller");
 });
 
-Deno.test(`toctl.ts GET service health (PID ${httpServer.process.pid})`, async () => {
+Deno.test(`toctl.ts GET service health (${httpServerCaption})`, async () => {
   const resp = await fetch(`${baseURL}/health`);
   const health = await resp.json();
   ta.assert(gsh.isHealthy(health));
@@ -51,7 +64,7 @@ Deno.test(`toctl.ts GET service health (PID ${httpServer.process.pid})`, async (
   );
 });
 
-Deno.test(`toctl.ts GET mod_test.single-tmpl.ts with two properties (PID ${httpServer.process.pid})`, async () => {
+Deno.test(`toctl.ts GET mod_test.single-tmpl.ts with two properties (${httpServerCaption})`, async () => {
   const resp = await fetch(
     `${baseURL}/transform/mod_test.single-tmpl.ts?body=TestBody&heading=TestHeading`,
   );
@@ -61,14 +74,14 @@ Deno.test(`toctl.ts GET mod_test.single-tmpl.ts with two properties (PID ${httpS
   );
 });
 
-Deno.test(`toctl.ts GET mod_test.multiple-tmpl.ts 'content1' template with two properties (PID ${httpServer.process.pid})`, async () => {
+Deno.test(`toctl.ts GET mod_test.multiple-tmpl.ts 'content1' template with two properties (${httpServerCaption})`, async () => {
   const resp = await fetch(
     `${baseURL}/transform/mod_test.multiple-tmpl.ts/content1?heading1=TestHeading&body1=TestBody`,
   );
   ta.assertEquals(await resp.text(), "Template 1: TestHeading, TestBody");
 });
 
-Deno.test(`toctl.ts POST medigy-email 'create-password' template with one property (PID ${httpServer.process.pid})`, async () => {
+Deno.test(`toctl.ts POST medigy-email 'create-password' template with one property (${httpServerCaption})`, async () => {
   const resp = await fetch(`${baseURL}/transform`, {
     method: "POST",
     body: JSON.stringify({
@@ -85,7 +98,7 @@ Deno.test(`toctl.ts POST medigy-email 'create-password' template with one proper
   );
 });
 
-Deno.test(`toctl.ts POST medigy-email 'create-password' template with invalid property (PID ${httpServer.process.pid})`, async () => {
+Deno.test(`toctl.ts POST medigy-email 'create-password' template with invalid property (${httpServerCaption})`, async () => {
   const resp = await fetch(`${baseURL}/transform`, {
     method: "POST",
     body: JSON.stringify({
@@ -103,13 +116,15 @@ Deno.test(`toctl.ts POST medigy-email 'create-password' template with invalid pr
   );
 });
 
-Deno.test({
-  name: `toctl.ts stop server (PID ${httpServer.process.pid})`,
-  fn: async () => {
-    await httpServer.stop();
-  },
-  // because httpServer is started outside of this method, we need to let Deno know
-  // not to check for resource leaks
-  sanitizeOps: false,
-  sanitizeResources: false,
-});
+if (childHttpServer) {
+  Deno.test({
+    name: `toctl.ts stop server (${httpServerCaption})`,
+    fn: async () => {
+      await childHttpServer!.stop();
+    },
+    // because httpServer is started outside of this method, we need to let Deno know
+    // not to check for resource leaks
+    sanitizeOps: false,
+    sanitizeResources: false,
+  });
+}
