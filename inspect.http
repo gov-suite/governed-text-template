@@ -1,5 +1,9 @@
 ###
 
+GET https://tx-email.service.medigy.com/health
+
+###
+
 GET https://tx-email.devl.medigy.com/health
 
 ###
