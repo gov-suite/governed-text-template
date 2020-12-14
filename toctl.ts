@@ -9,6 +9,7 @@ import {
 import * as server from "./server.ts";
 import * as tm from "./template-module.ts";
 
+// deno-lint-ignore require-await
 export async function determineVersion(importMetaURL: string): Promise<string> {
   return gsv.determineVersionFromRepoTag(
     importMetaURL,
@@ -120,6 +121,7 @@ export async function transformStdInJsonHandler(
   }
 }
 
+// deno-lint-ignore require-await
 export async function validateConfigHandler(
   chc: CommandHandlerContext,
 ): Promise<true | void> {
@@ -273,6 +275,7 @@ export class CommandHandlerContext implements CommandHandlerContext {
   }
 }
 
+// deno-lint-ignore require-await
 export async function versionHandler(
   ctx: CommandHandlerContext,
 ): Promise<true | void> {

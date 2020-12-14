@@ -4,7 +4,10 @@ export interface Content {
 }
 
 export function isValidContent(o: unknown): o is Content {
-  return o && typeof o === "object" && ("body" in o);
+  if (o && typeof o === "object") {
+    return "body" in o;
+  }
+  return false;
 }
 
 export function onInvalidContent(content: Content): string {
