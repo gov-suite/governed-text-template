@@ -1,14 +1,11 @@
+import { safety } from "./deps.ts";
+
 export interface Content {
   readonly heading?: string;
   readonly body: string;
 }
 
-export function isValidContent(o: unknown): o is Content {
-  if (o && typeof o === "object") {
-    return "body" in o;
-  }
-  return false;
-}
+export const isValidContent = safety.typeGuard<Content>("body");
 
 export function onInvalidContent(content: Content): string {
   return `body (with optional heading) expected in content JSON: ${content}`;
