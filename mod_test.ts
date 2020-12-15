@@ -12,11 +12,13 @@ function testFilePath(relTestFileName: string): string {
   );
 }
 
+// deno-lint-ignore require-await
 Deno.test(`HTML escaped string literal`, async () => {
   const escaped = mod.htmlEscape`This should be <escaped>`;
   ta.assertEquals(escaped, "This should be &lt;escaped&gt;");
 });
 
+// deno-lint-ignore require-await
 Deno.test(`Non-HTML escaped string literal with HTML escaped placeholders`, async () => {
   const escaped = "<be escaped>";
   const phe = mod.htmlEscapePlaceholders
@@ -24,12 +26,14 @@ Deno.test(`Non-HTML escaped string literal with HTML escaped placeholders`, asyn
   ta.assertEquals(phe, "This should be <not be escaped> &lt;be escaped&gt;");
 });
 
+// deno-lint-ignore require-await
 Deno.test(`HTML tag raw`, async () => {
   const div = mod.xmlTag("div");
   const phe = div`This should be in a div with <no escapes>`;
   ta.assertEquals(phe, "<div>This should be in a div with <no escapes></div>");
 });
 
+// deno-lint-ignore require-await
 Deno.test(`HTML tag with results escaped`, async () => {
   const div = mod.xmlTag(
     "div",

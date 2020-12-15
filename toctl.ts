@@ -256,19 +256,21 @@ export class CommandHandlerContext implements CommandHandlerContext {
     const health = await this.templateModulesHealthStatus(templateModules);
     for (const entry of Object.entries(health.details)) {
       const [name, componentStates] = entry;
-      for (const state of componentStates) {
-        if (gsh.isServiceHealthDiagnosable(state)) {
-          console.error(
-            `${colors.yellow(state.componentId)}: ${
-              colors.brightWhite(state.links["templateURL"])
-            } ${colors.red(state.output)}`,
-          );
-        } else if (this.isVerbose) {
-          console.log(
-            `${colors.yellow(state.componentId)}: ${
-              colors.brightWhite(state.links["templateURL"])
-            } ${colors.green("OK")}`,
-          );
+      if (Array.isArray(componentStates)) {
+        for (const state of componentStates) {
+          if (gsh.isServiceHealthDiagnosable(state)) {
+            console.error(
+              `${colors.yellow(state.componentId)}: ${
+                colors.brightWhite(state.links["templateURL"])
+              } ${colors.red(state.output)}`,
+            );
+          } else if (this.isVerbose) {
+            console.log(
+              `${colors.yellow(state.componentId)}: ${
+                colors.brightWhite(state.links["templateURL"])
+              } ${colors.green("OK")}`,
+            );
+          }
         }
       }
     }
